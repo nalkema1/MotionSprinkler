@@ -73,7 +73,7 @@ def myaction():
         on = True
         print("My action executed")
         relay2.value(1)
-        time.sleep(5)
+        time.sleep(8)
         relay2.value(0)
     else:
         print("already running")
@@ -83,6 +83,6 @@ mymotion = motion(14, myaction, True)
 while True:
     if mymotion.motiondetected():
         print("in the loop")
-    if on and (time.time() - start > 10):
+    if on and (time.time() - start > 12):
         print("action reset")
         on = False
