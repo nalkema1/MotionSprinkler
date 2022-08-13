@@ -15,7 +15,7 @@ class motion():
     def pir_action(self, pin):
         self._motiondetected = True
         if self.debug:
-            print(f"Motion detected on {time.ctime()}")
+            print(f"Motion detected")
         self.action()
         # myaction()
 

@@ -15,25 +15,12 @@ import os
 import esp32
 import gc
 
-prod = True # run without network
+prod = True # run with network
+bypassupdate = False
 reboot = False
 start_time = time.ticks_ms()
 power_on = time.ticks_ms()
 data = {}
-
-
-def setCPU(size):
-    if size == 3:
-        print("CPU set to 16 mhz")
-        machine.freq(160000000)
-        return
-    if size == 2:
-        print("CPU set to 8 mhz")
-        machine.freq(80000000)
-        return
-    else:
-        print("CPU set to 4 mhz")
-        machine.freq(40000000)
 
 def ConnectToNetwork():
 
@@ -60,7 +47,7 @@ if wm.is_connected():
     except:
         data["day"] = 99
 
-    if data["day"] != currentTime["day"]:
+    if not bypassupdate and data["day"] != currentTime["day"]:
         print("Checking for software update....")
         otaUpdater = OTAUpdater('https://github.com/nalkema1/MotionSprinkler', main_dir='app', headers={'Accept': 'application/vnd.github.v3+json'})
 
