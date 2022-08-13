@@ -2,19 +2,19 @@ Activities:
 
 
 Base:
-- Setup source control with git
+- Setup source control with git - DONE /nalkema1/MotionSprinkler
 - Create motion sensor module in Python - CODED  - TESTED
 - Create test harnass - CODED
-- Create sprinker activation module in Python
-- Create sprinker activation logic
-- Power ESP32 by converting 9v to 3.3v
-- Solder all components together and finalize enclosure box
-- enable USB access to EPS32 to support direct loading of software 
+- Create sprinker activation module in Python - CODED
+- Create sprinker activation logic - CODED
+- Power ESP32 by converting 9v to 5.1v - DONE
+- Solder all components together and finalize enclosure box - DONE
+- enable USB access to EPS32 to support direct loading of software - DONE 
 
 Base Plus:
-- Add Wifi manager
-- Add OTA module and get new versions from GIT (or - enable USB access to EPS32 to support direct loading of software )
-- sync with NTP to get the actual time/date
+- Add Wifi manager -DONE
+- Add OTA module and get new versions from GIT (or - enable USB access to EPS32 to support direct loading of software ) - DONE
+- sync with NTP to get the actual time/date - DONE
 - Logging
 
 Future:
@@ -29,4 +29,11 @@ PIR Config:
 - 3.3v to 3.3v on ESP32
 - GRD to GRD on ESP32
 - Data to GPIO 14 on ESP32
+
+
+Libraries needed for pico webserver:
+import upip
+upip.install('picoweb')
+upip.install("micropython-ulogging")
+
 
