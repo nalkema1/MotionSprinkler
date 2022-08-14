@@ -61,9 +61,19 @@ if wm.is_connected():
         with open('last_update.txt','w') as f:
             ujson.dump(currentTime, f)
 
+power_on = time.ticks_ms()
 on = False
 start = time.time()
 relay2 = Pin(17, Pin.OUT)
+
+def CheckSchedule(timer):
+    
+    if gc.mem_free() < 500000:
+        machine.reset()
+
+    time_now = time.ticks_ms()
+    if time.ticks_diff(time_now, power_on) > 3.6e+6:
+        machine.reset()
 
 def myaction():
     global on
@@ -79,6 +89,8 @@ def myaction():
         print("already running")
 
 mymotion = motion(14, myaction, True)
+timer = machine.Timer(0)  
+timer.init(period=500000, mode=machine.Timer.PERIODIC, callback=CheckSchedule)
 
 while True:
     if mymotion.motiondetected():
