@@ -69,10 +69,12 @@ relay2 = Pin(17, Pin.OUT)
 def CheckSchedule(timer):
     
     if gc.mem_free() < 500000:
+        print("low memory, resetting system")
         machine.reset()
 
     time_now = time.ticks_ms()
     if time.ticks_diff(time_now, power_on) > 3.6e+6:
+        print("time for a daily reset")
         machine.reset()
 
 def myaction():
