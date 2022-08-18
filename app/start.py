@@ -93,6 +93,7 @@ def myaction():
 mymotion = motion(14, myaction, True)
 timer = machine.Timer(0)  
 timer.init(period=500000, mode=machine.Timer.PERIODIC, callback=CheckSchedule)
+machine.freq(80000000)
 
 while True:
     if mymotion.motiondetected():
