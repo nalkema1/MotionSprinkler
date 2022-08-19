@@ -49,18 +49,21 @@ if wm.is_connected():
 
     if not bypassupdate and data["day"] != currentTime["day"]:
         print("Checking for software update....")
-        otaUpdater = OTAUpdater('https://github.com/nalkema1/MotionSprinkler', main_dir='app', headers={'Accept': 'application/vnd.github.v3+json'})
+        try:
+            otaUpdater = OTAUpdater('https://github.com/nalkema1/MotionSprinkler', main_dir='app', headers={'Accept': 'application/vnd.github.v3+json'})
 
-        hasUpdated = otaUpdater.install_update_if_available()
-        if hasUpdated:
-            machine.reset()
-        else:
-            del(otaUpdater)
-            gc.collect()
+            hasUpdated = otaUpdater.install_update_if_available()
+            if hasUpdated:
+                machine.reset()
+            else:
+                del(otaUpdater)
+                gc.collect()
 
-        with open('last_update.txt','w') as f:
-            ujson.dump(currentTime, f)
-
+            with open('last_update.txt','w') as f:
+                ujson.dump(currentTime, f)
+        except:
+            print("OTA Updated failed")
+            
 power_on = time.ticks_ms()
 on = False
 start = time.time()

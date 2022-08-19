@@ -1,7 +1,7 @@
 import ntptime
 import time
 
-def ntpsync(retries=5, retry_pause=.3):
+def ntpsync(retries=10, retry_pause=.5):
     ntptime.host = "us.pool.ntp.org"
     ntpsync = False
     for retries in range(retries):    
