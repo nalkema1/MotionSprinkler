@@ -71,15 +71,15 @@ relay2 = Pin(17, Pin.OUT)
 
 def CheckSchedule(timer):
     
-    if gc.mem_free() < 500000:
+    print("checking schedule")
+    if gc.mem_free() < 100000:
         gc.collect()
         print("garbage collection finished, mem-avail = :", gc.mem_free())
-    if gc.mem_free() < 100000:
+    if gc.mem_free() < 50000:
         print("low memory, resetting system")
         machine.reset()
 
-    time_now = time.ticks_ms()
-    if time.ticks_diff(time_now, power_on) > 3.6e+6:
+    if time.ticks_diff(time.ticks_ms(), power_on) > 3.6e+6:
         print("time for a daily reset")
         machine.reset()
 
@@ -98,7 +98,7 @@ def myaction():
 
 mymotion = motion(14, myaction, True)
 timer = machine.Timer(0)  
-timer.init(period=500000, mode=machine.Timer.PERIODIC, callback=CheckSchedule)
+timer.init(period=60000, mode=machine.Timer.PERIODIC, callback=CheckSchedule)
 machine.freq(80000000)
 
 while True:
