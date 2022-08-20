@@ -72,6 +72,9 @@ relay2 = Pin(17, Pin.OUT)
 def CheckSchedule(timer):
     
     if gc.mem_free() < 500000:
+        gc.collect()
+        print("garbage collection finished, mem-avail = :", gc.mem_free())
+    if gc.mem_free() < 100000:
         print("low memory, resetting system")
         machine.reset()
 
