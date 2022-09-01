@@ -10,6 +10,7 @@ import ure
 import utime
 
 
+
 class WifiManager:
 
     def __init__(self, ssid = 'WifiManager', password = 'wifimanager'):
@@ -45,7 +46,7 @@ class WifiManager:
         self.reboot = False
 
 
-    def connect(self, prod=True):
+    def connect(self, prod=True, reset_action = "PWRON_RESET"):
         if self.wlan_sta.isconnected():
             print('\nAlready Connected! Network information:', self.wlan_sta.ifconfig())
             return
@@ -56,10 +57,9 @@ class WifiManager:
                 password = profiles[ssid]
                 if self.__WifiConnect(ssid, password):
                     return
-        print('Could not connect to any WiFi network. Starting the configuration portal...')
-        if prod:
+        if prod and reset_action == "PWRON_RESET":
+            print('Could not connect to any WiFi network. Starting the configuration portal...')
             self.__WebServer()
-        
     
     def disconnect(self):
         if self.wlan_sta.isconnected():
@@ -121,6 +121,7 @@ class WifiManager:
         server_socket.bind(('', 8080))
         server_socket.listen(1)
         print('Connect to', self.ap_ssid, 'with the password', self.ap_password, 'and access the captive portal at', self.wlan_ap.ifconfig()[0])
+
         while True:
             if self.wlan_sta.isconnected():
                 self.wlan_ap.active(False)

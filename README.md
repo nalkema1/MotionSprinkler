@@ -21,6 +21,10 @@ Future:
 - Take picture when motion is activated
 - Battery operated system instead of wired
 - Custom printed enclosure for electronics and solenoid
+- Enable custom schedule for regular watering, pull schedule from website
+- Check external website for custom instructions, e.g. force new version, pause, reboot
+- Detect scenario when application crashed, and force reboot, upload of logfiles
+- Enable system to activate even when there is no wifi, or provide button to activate wifisetup
 
 
 Installation Instructions:

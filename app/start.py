@@ -22,22 +22,30 @@ start_time = time.ticks_ms()
 power_on = time.ticks_ms()
 data = {}
 
-def ConnectToNetwork():
+def ConnectToNetwork(reset_action):
 
     global wm
 
     if not wm.is_connected():
         for retries in range(5):
-            wm.connect(prod)
+            wm.connect(prod, reset_action)
             if wm.is_connected():
                 break
             else:
                 time.sleep(1)
         ntpsync()
 
+MyResetCause = machine.reset_cause()
+resetstr = "Unknown - "+str(MyResetCause)
+if ( MyResetCause == machine.PWRON_RESET ): resetstr = "PWRON_RESET"
+if ( MyResetCause == machine.HARD_RESET ): resetstr = "HARD_RESET"
+if ( MyResetCause == machine.WDT_RESET ): resetstr = "WDT_RESET"
+if ( MyResetCause == machine.DEEPSLEEP_RESET ): resetstr = "DEEPSLEEP_RESET"
+if ( MyResetCause == machine.SOFT_RESET ): resetstr = "SOFT_RESET"
+print("Boot status : ", resetstr)
 
 wm = WifiManager()
-ConnectToNetwork()
+ConnectToNetwork(resetstr)
 
 if wm.is_connected():
     currentTime = myTimeAsDict()
