@@ -119,10 +119,16 @@ class WifiManager:
         server_socket = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
         server_socket.setsockopt(usocket.SOL_SOCKET, usocket.SO_REUSEADDR, 1)
         server_socket.bind(('', 8080))
-        server_socket.listen(1)
+        try:
+            server_socket.listen(1)
+        except Exception as e:
+            print('Something went wrong! Reboot and try again.')
+            print(e)
+            return
         print('Connect to', self.ap_ssid, 'with the password', self.ap_password, 'and access the captive portal at', self.wlan_ap.ifconfig()[0])
 
-        while True:
+        config_start = utime.time()
+        while utime.time() - config_start > 600:
             if self.wlan_sta.isconnected():
                 self.wlan_ap.active(False)
                 if self.reboot:
@@ -158,6 +164,8 @@ class WifiManager:
                 return
             finally:
                 self.client.close()
+                
+        return
 
 
     def __SendHeader(self, status_code = 200):

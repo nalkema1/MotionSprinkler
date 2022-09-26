@@ -82,8 +82,7 @@ def CheckSchedule(timer):
     print("checking schedule")
     if gc.mem_free() < 100000:
         gc.collect()
-        print("garbage collection finished, mem-avail = :", gc.mem_free())
-    if gc.mem_free() < 50000:
+    if gc.mem_free() < 40000:
         print("low memory, resetting system")
         machine.reset()
 
