@@ -8,12 +8,13 @@ import network
 import usocket
 import ure
 import utime
+from app.telemetry import sendTelemetry
 
 
 
 class WifiManager:
 
-    def __init__(self, ssid = 'WifiManager', password = 'wifimanager'):
+    def __init__(self, ssid = 'MotionSprinkler', password = 'motionsprinkler'):
 
         self.wlan_sta = network.WLAN(network.STA_IF)
         self.wlan_sta.active(False)
@@ -48,7 +49,7 @@ class WifiManager:
 
     def connect(self, prod=True, reset_action = "PWRON_RESET"):
         if self.wlan_sta.isconnected():
-            print('\nAlready Connected! Network information:', self.wlan_sta.ifconfig())
+            sendTelemetry(f"\nAlready Connected! Network information:{self.wlan_sta.ifconfig()}")
             return
         profiles = self.__ReadProfiles()
         for ssid, *_ in self.wlan_sta.scan():
@@ -58,7 +59,7 @@ class WifiManager:
                 if self.__WifiConnect(ssid, password):
                     return
         if prod and reset_action == "PWRON_RESET":
-            print('Could not connect to any WiFi network. Starting the configuration portal...')
+            sendTelemetry('Could not connect to any WiFi network. Starting the configuration portal...')
             self.__WebServer()
     
     def disconnect(self):
@@ -97,16 +98,16 @@ class WifiManager:
 
 
     def __WifiConnect(self, ssid, password):
-        print('Trying to connect to:', ssid)
+        sendTelemetry(f"Trying to connect to:{ssid}")
         self.wlan_sta.connect(ssid, password)
         for _ in range(100):
             if self.wlan_sta.isconnected():
-                print('\nConnected! Network information:', self.wlan_sta.ifconfig())
+                sendTelemetry(f"\nConnected! Network information: {self.wlan_sta.ifconfig()}",)
                 return True
             else:
                 print('.', end='')
                 utime.sleep_ms(100)
-        print('\nConnection failed!')
+        sendTelemetry('\nConnection failed!')
         self.wlan_sta.disconnect()
         return False
 
@@ -122,17 +123,19 @@ class WifiManager:
         try:
             server_socket.listen(1)
         except Exception as e:
-            print('Something went wrong! Reboot and try again.')
-            print(e)
+            sendTelemetry('Something went wrong! Reboot and try again.')
+            sendTelemetry(e)
+            self.wlan_ap.active(False)
             return
         print('Connect to', self.ap_ssid, 'with the password', self.ap_password, 'and access the captive portal at', self.wlan_ap.ifconfig()[0])
 
         config_start = utime.time()
-        while utime.time() - config_start > 600:
+        # while utime.time() - config_start > 600:
+        while True:
             if self.wlan_sta.isconnected():
                 self.wlan_ap.active(False)
                 if self.reboot:
-                    print('The device will reboot in 5 seconds.')
+                    sendTelemetry('The device will reboot in 5 seconds.')
                     utime.sleep(5)
                     machine.reset()
                 return
@@ -159,8 +162,8 @@ class WifiManager:
                     else:
                         self.__HandleNotFound()
             except Exception as e:
-                print('Something went wrong! Reboot and try again.')
-                print(e)
+                sendTelemetry('Something went wrong! Reboot and try again.')
+                sendTelemetry(e)
                 return
             finally:
                 self.client.close()
