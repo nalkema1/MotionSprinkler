@@ -38,7 +38,6 @@ def ConnectToNetwork(reset_action):
             
 def CheckSchedule(timer):
     
-    print("checking schedule")
     if gc.mem_free() < 100000:
         gc.collect()
     if gc.mem_free() < 40000:

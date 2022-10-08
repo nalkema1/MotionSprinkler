@@ -49,7 +49,7 @@ class WifiManager:
 
     def connect(self, prod=True, reset_action = "PWRON_RESET"):
         if self.wlan_sta.isconnected():
-            sendTelemetry(f"\nAlready Connected! Network information:{self.wlan_sta.ifconfig()}")
+            sendTelemetry(f"Already Connected! Network information:{self.wlan_sta.ifconfig()}")
             return
         profiles = self.__ReadProfiles()
         for ssid, *_ in self.wlan_sta.scan():
@@ -102,12 +102,12 @@ class WifiManager:
         self.wlan_sta.connect(ssid, password)
         for _ in range(100):
             if self.wlan_sta.isconnected():
-                sendTelemetry(f"\nConnected! Network information: {self.wlan_sta.ifconfig()}",)
+                sendTelemetry(f"Connected! Network information: {self.wlan_sta.ifconfig()}",)
                 return True
             else:
                 print('.', end='')
                 utime.sleep_ms(100)
-        sendTelemetry('\nConnection failed!')
+        sendTelemetry('Connection failed!')
         self.wlan_sta.disconnect()
         return False
 

@@ -1,5 +1,6 @@
 import ntptime
 import time
+from app.telemetry import sendTelemetry
 
 def ntpsync(retries=10, retry_pause=.5):
     ntptime.host = "us.pool.ntp.org"
@@ -10,12 +11,12 @@ def ntpsync(retries=10, retry_pause=.5):
             ntpsync = True
             break
         except:
-            print("Error syncing time, retrying...")
+            sendTelemetry("Error syncing time, retrying...")
     time.sleep(retry_pause)
     if ntpsync:
-        print("Local time after synchronization：%s" %str(time.localtime()))
+        sendTelemetry(f"Local time after synchronization{str(time.localtime())}")
     else:
-        print("Error syncing time: %s" %str(time.localtime())) 
+        sendTelemetry(f"Error syncing time: {str(time.localtime())}" ) 
 
 def myTime(UTC_OFFSET=14400):
     """
