@@ -37,7 +37,7 @@ def ConnectToNetwork(reset_action):
         ntpsync()
             
 def CheckSchedule(timer):
-    
+
     if gc.mem_free() < 100000:
         gc.collect()
     if gc.mem_free() < 40000:
@@ -92,10 +92,12 @@ if wm.is_connected():
     except:
         data["day"] = 99
 
+    otaUpdater = OTAUpdater('https://github.com/nalkema1/MotionSprinkler', main_dir='app', headers={'Accept': 'application/vnd.github.v3+json'})
+    current_version = otaUpdater.get_version(otaUpdater.modulepath(otaUpdater.main_dir))
+    sendTelemetry(f"Current Version : {current_version}")
     if not bypassupdate and data["day"] != currentTime["day"]:
         sendTelemetry("Checking for software update....")
         try:
-            otaUpdater = OTAUpdater('https://github.com/nalkema1/MotionSprinkler', main_dir='app', headers={'Accept': 'application/vnd.github.v3+json'})
 
             hasUpdated = otaUpdater.install_update_if_available()
             if hasUpdated:

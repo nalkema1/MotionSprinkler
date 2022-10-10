@@ -1,5 +1,10 @@
 from .httpclient import HttpClient
 import gc
+import machine
+import ubinascii
+
+# Determine device unique MAC address
+mac = ubinascii.hexlify(machine.unique_id(),':').decode()
 
 encode_chars = {   " " :   "%20",
         "“":	"%22",
@@ -31,9 +36,10 @@ def sendTelemetry(logdata):
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"}
         http_client = HttpClient(headers=headers)
 
+        logdata = mac + " : " + logdata
         logdata = urlencode(logdata)
         try:
-            url = f"http://homeservice.azurewebsites.net/api/msensreport?code=yTlDbj8p-zPx7IbnlLFEp4t9IuEvm-YblJBRPkDuO3ZMAzFufukojg==&log={logdata}"
+            url = f"https://motionsprinkler.azurewebsites.net/api/msensreport?code=ktZUx-NihRRcTwPnouF5xKU5iYYQZgi0c_MTGSa_vn8_AzFucx_tvw==&log={logdata}"
             print(f"URL: {url}")
             response = http_client.get(url)
             gc.collect()
