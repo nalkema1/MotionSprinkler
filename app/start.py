@@ -44,7 +44,7 @@ def CheckSchedule(timer):
         sendTelemetry("low memory, resetting system")
         machine.reset()
 
-    if time.ticks_diff(time.ticks_ms(), power_on) > 3.6e+6:
+    if time.ticks_diff(time.ticks_ms(), power_on) > 86400000:
         sendTelemetry("time for a daily reset")
         machine.reset()
 

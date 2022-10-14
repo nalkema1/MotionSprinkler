@@ -129,11 +129,9 @@ class OTAUpdater:
         try:
             version = gh_json['tag_name']
         except KeyError as e:
-            raise ValueError(
-                "Release not found: \n",
-                "Please ensure release as marked as 'latest', rather than pre-release \n",
-                "github api message: \n {} \n ".format(gh_json)
-            )
+            error = "Release not found: \nPlease ensure release as marked as 'latest', rather than pre-release \ngithub api message: \n {} \n ".format(gh_json)
+            sendTelemetry(error)
+            raise ValueError(error)
         latest_release.close()
         return version
 
@@ -145,19 +143,19 @@ class OTAUpdater:
     def _download_all_files(self, version, sub_dir=''):
         url = 'https://api.github.com/repos/{}/contents{}{}{}?ref=refs/tags/{}'.format(self.github_repo, self.github_src_dir, self.main_dir, sub_dir, version)
         gc.collect() 
-        print("url: ", url)
+        sendTelemetry("url: {url}")
         file_list = self.http_client.get(url)
         file_list_json = file_list.json()
-        print(file_list_json)
+        sendTelemetry(file_list_json)
         for file in file_list_json:
-            print("processing :", file)
+            sendTelemetry(f"processing :{file}")
             path = self.modulepath(self.new_version_dir + '/' + file['path'].replace(self.main_dir + '/', '').replace(self.github_src_dir, ''))
             if file['type'] == 'file':
                 gitPath = file['path']
-                print('\tDownloading: ', gitPath, 'to', path)
+                sendTelemetry(f'\tDownloading: {gitPath} to {path}')
                 self._download_file(version, gitPath, path)
             elif file['type'] == 'dir':
-                print('Creating dir', path)
+                sendTelemetry(f'Creating dir : {path}')
                 self.mkdir(path)
                 self._download_all_files(version, sub_dir + '/' + file['name'])
             gc.collect()
@@ -171,14 +169,14 @@ class OTAUpdater:
         if self.secrets_file:
             fromPath = self.modulepath(self.main_dir + '/' + self.secrets_file)
             toPath = self.modulepath(self.new_version_dir + '/' + self.secrets_file)
-            print('Copying secrets file from {} to {}'.format(fromPath, toPath))
+            sendTelemetry('Copying secrets file from {} to {}'.format(fromPath, toPath))
             self._copy_file(fromPath, toPath)
-            print('Copied secrets file from {} to {}'.format(fromPath, toPath))
+            sendTelemetry('Copied secrets file from {} to {}'.format(fromPath, toPath))
 
     def _delete_old_version(self):
-        print('Deleting old version at {} ...'.format(self.modulepath(self.main_dir)))
+        sendTelemetry('Deleting old version at {} ...'.format(self.modulepath(self.main_dir)))
         self._rmtree(self.modulepath(self.main_dir))
-        print('Deleted old version at {} ...'.format(self.modulepath(self.main_dir)))
+        sendTelemetry('Deleted old version at {} ...'.format(self.modulepath(self.main_dir)))
 
     def _install_new_version(self):
         sendTelemetry('Installing new version at {} ...'.format(self.modulepath(self.main_dir)))
