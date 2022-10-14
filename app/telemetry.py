@@ -2,6 +2,7 @@ from .httpclient import HttpClient
 import gc
 import machine
 import ubinascii
+import keys
 
 # Determine device unique MAC address
 mac = ubinascii.hexlify(machine.unique_id(),':').decode()
@@ -39,7 +40,7 @@ def sendTelemetry(logdata):
         logdata = mac + " : " + logdata
         logdata = urlencode(logdata)
         try:
-            url = f"https://motionsprinkler.azurewebsites.net/api/msensreport?code=ktZUx-NihRRcTwPnouF5xKU5iYYQZgi0c_MTGSa_vn8_AzFucx_tvw==&log={logdata}"
+            url = f"https://motionsprinkler.azurewebsites.net/api/msensreport?code={keys.appcode}&log={logdata}"
             print(f"URL: {url}")
             response = http_client.get(url)
             gc.collect()

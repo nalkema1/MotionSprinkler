@@ -1,5 +1,6 @@
   # Custom for this project
 webrepl_cfg.py
+keys.py
 *.ipynb
 photos/
 
