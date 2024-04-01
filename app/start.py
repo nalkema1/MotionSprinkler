@@ -1,7 +1,5 @@
 import os
-f = open('keys.py', 'w')
-f.write('appcode = "ktZUx-NihRRcTwPnouF5xKU5iYYQZgi0c_MTGSa_vn8_AzFucx_tvw=="\n')
-f.close()
+
 
 import time
 from app.timesync import ntpsync
