@@ -75,20 +75,25 @@ class OTAUpdater:
             bool: true if a new version is available, false otherwise
         """
 
-        (current_version, latest_version) = self._check_for_new_version()
-        if latest_version > current_version:
-            sendTelemetry('Updating to version {}...'.format(latest_version))
-            self._create_new_version_file(latest_version)
-            self._download_new_version(latest_version)
-            self._copy_secrets_file()
-            self._delete_old_version()
-            self._install_new_version()
-            return True
+        try:
+            (current_version, latest_version) = self._check_for_new_version()
+            # Parse versions to tuples of integers to compare them correctly
+            current_version_tuple = tuple(map(int, current_version.strip('v').split('.')))
+            latest_version_tuple = tuple(map(int, latest_version.strip('v').split('.')))
+
+            if latest_version_tuple > current_version_tuple:
+                sendTelemetry(f'Updating to version {latest_version}...')
+                self._create_new_version_file(latest_version)
+                self._download_new_version(latest_version)
+                self._copy_secrets_file()
+                self._delete_old_version()
+                self._install_new_version()
+                return True
+        except ValueError as e:
+            sendTelemetry(f'Error parsing version numbers: {e}')
         
         return False
-
-
-    @staticmethod
+            
     def _using_network(ssid, password):
         import network
         sta_if = network.WLAN(network.STA_IF)
