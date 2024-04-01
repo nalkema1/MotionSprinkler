@@ -23,6 +23,7 @@ import gc
 
 prod = True # run with network
 bypassupdate = False
+alwayscheck_update = True
 reboot = False
 start_time = time.ticks_ms()
 power_on = time.ticks_ms()
@@ -54,6 +55,7 @@ def CheckSchedule(timer):
         machine.reset()
 
 def myaction():
+
     global on
     global start
     if not on:
@@ -65,13 +67,19 @@ def myaction():
         relay2.value(0)
     else:
         print("already running")
+        relay2.value(0)
+        on = False
+
+def nonaction():
+    sendTelemetry("Motion detected")
 
 power_on = time.ticks_ms()
 on = False
 start = time.time()
 relay2 = Pin(17, Pin.OUT)
 
-mymotion = motion(14, myaction, True)
+# mymotion = motion(14, myaction, True) # Turning motion detection on. 
+mymotion = motion(14, nonaction, True) # Turning motion detection off.
 timer = machine.Timer(0)  
 timer.init(period=60000, mode=machine.Timer.PERIODIC, callback=CheckSchedule)
 machine.freq(80000000)
@@ -100,7 +108,7 @@ if wm.is_connected():
     otaUpdater = OTAUpdater('https://github.com/nalkema1/MotionSprinkler', main_dir='app', headers={'Accept': 'application/vnd.github.v3+json'})
     current_version = otaUpdater.get_version(otaUpdater.modulepath(otaUpdater.main_dir))
     sendTelemetry(f"Current Version : {current_version}")
-    if not bypassupdate and data["day"] != currentTime["day"]:
+    if (not bypassupdate and data["day"] != currentTime["day"]) or alwayscheck_update:
         sendTelemetry("Checking for software update....")
         try:
 
@@ -116,10 +124,13 @@ if wm.is_connected():
         except:
             sendTelemetry("OTA Updated failed")
 
+import app.website
 
+print("starting main loop")
 while True:
-    if mymotion.motiondetected():
-        print("in the loop")
-    if on and (time.time() - start > 12):
-        print("action reset")
-        on = False
+    pass    
+    # if mymotion.motiondetected():
+    #     print("in the loop")
+    # if on and (time.time() - start > 12):
+    #     print("action reset")
+    #     on = False

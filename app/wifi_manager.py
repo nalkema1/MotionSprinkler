@@ -19,6 +19,7 @@ class WifiManager:
         self.wlan_sta = network.WLAN(network.STA_IF)
         self.wlan_sta.active(False)
         self.wlan_sta.active(True)
+        self.wlan_sta.config(dhcp_hostname='smartsprinker')
         self.wlan_sta.config(reconnects = 5) # 5 tries max
         self.wlan_ap = network.WLAN(network.AP_IF)
         
@@ -102,7 +103,9 @@ class WifiManager:
         self.wlan_sta.connect(ssid, password)
         for _ in range(100):
             if self.wlan_sta.isconnected():
-                sendTelemetry(f"Connected! Network information: {self.wlan_sta.ifconfig()}",)
+                sendTelemetry(f"Connected! Network information: {self.wlan_sta.ifconfig()}")
+                print(f"Connected! Network information: {self.wlan_sta.ifconfig()}")
+                # self.wlan_sta.config(dhcp_hostname='smartsprinkler')
                 return True
             else:
                 print('.', end='')

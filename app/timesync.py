@@ -18,7 +18,7 @@ def ntpsync(retries=10, retry_pause=.5):
     else:
         sendTelemetry(f"Error syncing time: {str(time.localtime())}" ) 
 
-def myTime(UTC_OFFSET=14400):
+def myTime(UTC_OFFSET=-14400):
     """
     UTC_OFFSET = -4 * 60 * 60   # change the '-4' according to your timezone
     """

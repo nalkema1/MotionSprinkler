@@ -1,64 +1,37 @@
-from .httpclient import HttpClient
-import gc
-import machine
-import ubinascii
-import keys
+import time
 
-# Determine device unique MAC address
-mac = ubinascii.hexlify(machine.unique_id(),':').decode()
-
-encode_chars = {   " " :   "%20",
-        "“":	"%22",
-        "<":	"%3C",
-        ">":	"%3E",
-        "#":	"%23",
-        "%":	"%25",
-        "{":	"%7B",
-        "}":    "%7D",
-        "|":	"%7C",
-        "\\":	"%5C",
-        "^":	"%5E",
-        "~":	"%7E",
-        "[":	"%5B",
-        "]":	"%5D"
-    }
+def myTime(UTC_OFFSET=-14400):
+    """
+    UTC_OFFSET = -4 * 60 * 60   # change the '-4' according to your timezone
+    """
+    return time.localtime(time.time() + UTC_OFFSET)
 
 def sendTelemetry(logdata):
-
-        if logdata is None:
-            return
-
-        if logdata == "None":    
-            return
-
-        print(f"logdata : {logdata}")
-
-        headers = {"accept" : "text/html",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"}
-        http_client = HttpClient(headers=headers)
-
-        logdata = mac + " : " + logdata
-        logdata = urlencode(logdata)
-        try:
-            url = f"https://motionsprinkler.azurewebsites.net/api/msensreport?code={keys.appcode}&log={logdata}"
-            print(f"URL: {url}")
-            response = http_client.get(url)
-            gc.collect()
-            if response.status_code != 200:
-                print(f"Msg failed. Status Code: {response.status_code} - URL: {url}")
-        except Exception as e:
-            print(f"Msg failed. Reason: {e}  - URL: {url}")
-            gc.collect()
+    if logdata is None or logdata == "None":
         return
 
-def urlencode(string):
+    # Get the current date and time to create a timestamp
+    current_time = myTime()
+    # MicroPython's time module doesn't have strftime, so we format it manually
+    timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
+        current_time[0], current_time[1], current_time[2],
+        current_time[3], current_time[4], current_time[5]
+    )
+    formatted_logdata = f"{timestamp}, {logdata}"
 
-    encoded_string = ""
-    for char in string:
-        newchar = encode_chars.get(char)
-        if newchar:
-            encoded_string += newchar
-        else:
-            encoded_string += char
+    print(f"logdata : {formatted_logdata}")
 
-    return(encoded_string)
+    # Get the current date to create a filename
+    filename = "telemetry.csv"
+
+    # Check if we need to recycle the file (i.e., if it's a new day)
+    if current_time[3] == 0 and current_time[4] < 1:  # Accessing tuple elements directly
+        # It's shortly after 12:00AM, overwrite the existing file
+        with open(filename, "w") as file:
+            file.write(formatted_logdata + "\n")
+    else:
+        # Write the log data to the file
+        with open(filename, "a") as file:
+            file.write(formatted_logdata + "\n")
+
+    return
