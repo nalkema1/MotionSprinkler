@@ -90,6 +90,7 @@ def index(req, resp):
             <li><a href="/config">Configure Sprinkler</a></li>
             <li><a href="/telemetry">View Telemetry Data</a></li>
             <li><a href="/config.json">Download Configuration</a></li>
+            <li><a href="/telemetry.csv">Download Telemetry Data</a></li>
         </ul>
     </body></html>""")
 
@@ -151,5 +152,15 @@ def telemetry(req, resp):
             yield from resp.awrite("</table></body></html>")
     except OSError:
         yield from resp.awrite("<html><body><h1>Error: Telemetry file not found</h1></body></html>")
+
+# Add a route to download the telemetry data
+@app.route("/telemetry.csv")
+def download_telemetry(req, resp):
+    yield from picoweb.start_response(resp, content_type="text/csv")
+    try:
+        with open(TELEMETRY_FILE, 'r') as f:
+            yield from resp.awrite(f.read())
+    except OSError:
+        yield from resp.awrite("Error: Telemetry file not found")
 
 app.run(debug=True, host="0.0.0.0", port=80)
