@@ -24,14 +24,18 @@ def sendTelemetry(logdata):
     # Get the current date to create a filename
     filename = "telemetry.csv"
 
-    # Check if we need to recycle the file (i.e., if it's a new day)
-    if current_time[3] == 0 and current_time[4] < 1:  # Accessing tuple elements directly
-        # It's shortly after 12:00AM, overwrite the existing file
+    # Check if the file size is greater than 300k and overwrite if necessary
+    try:
+        if os.stat(filename).st_size > 300 * 1024:
+            with open(filename, "w") as file:
+                file.write(formatted_logdata + "\n")
+        else:
+            # Write the log data to the file
+            with open(filename, "a") as file:
+                file.write(formatted_logdata + "\n")
+    except OSError:
+        # If the file does not exist, create it by writing the log data
         with open(filename, "w") as file:
-            file.write(formatted_logdata + "\n")
-    else:
-        # Write the log data to the file
-        with open(filename, "a") as file:
             file.write(formatted_logdata + "\n")
 
     return
