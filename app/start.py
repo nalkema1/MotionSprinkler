@@ -123,7 +123,7 @@ if wm.is_connected():
             sendTelemetry(error_message)
 
 import app.website
-sendTelemetry("Application Started")
+
 print("starting main loop")
 while True:
     pass    

@@ -64,12 +64,12 @@ def check_schedule(schedule):
             if current_hour == hour and current_minute == minute:
                 # Turn on the sprinkler for the scheduled duration
                 formatted_date_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(current_time[2], current_time[1], current_time[0], current_time[3], current_time[4])
-                sendTelemetry(f"Activating Trigger at: {formatted_date_time}")
+                sendTelemetry(f"activating Trigger at: {formatted_date_time}")
                 activate_sprinker(schedule_durations[i] * 60)  # Convert minutes to seconds
                 return True
             else:
                 formatted_date_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(current_time[2], current_time[1], current_time[0], current_time[3], current_time[4])
-                # sendTelemetry(f"Schedule checked: {formatted_date_time}")
+                sendTelemetry(f"Schedule checked at {formatted_date_time}, and no triggers activated")
     return False
 
 # Function to continuously check the schedule and activate the sprinkler
@@ -97,13 +97,13 @@ CSS_STYLE = """<style>
     form { background-color: #fff; padding: 20px; border-radius: 8px; }
     input[type=submit] { background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
     input[type=submit]:hover { background-color: #218838; }
-    .menu-button { position: fixed; top: 5px; left: 5px; z-index: 100; }
+    .menu-button { position: fixed; top: 15px; left: 15px; z-index: 100; }
     .menu-button a { font-size: 30px; }
 </style>"""
 
 # Define a function to render the menu button
 def render_menu_button():
-    return '<div class="menu-button"><a href="/">&#8962;</a></div>'  # Unicode character for home icon
+    return '<div class="menu-button"><a href="/">&#9776;</a></div>'
 
 @app.route("/")
 def index(req, resp):
