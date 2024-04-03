@@ -1,11 +1,11 @@
 import picoweb
 import ujson
 import utime
-from machine import Pin, Timer
+from machine import Pin, Timer, reset
 import time
 from app.timesync import myTime
 from app.telemetry import sendTelemetry
-
+import gc
 
 app = picoweb.WebApp(__name__)
 
@@ -81,16 +81,35 @@ def schedule_checker(timer):
 timer = Timer(-1)
 timer.init(period=30000, mode=Timer.PERIODIC, callback=schedule_checker)  # Check every 30 seconds
 
+# Define a simple CSS style to improve the UI
+CSS_STYLE = """<style>
+    body { font-family: Arial, sans-serif; margin: 40px; background-color: #f4f4f4; }
+    h1 { color: #333; }
+    ul { list-style-type: none; padding: 0; }
+    li { margin: 10px 0; }
+    a { text-decoration: none; color: #007bff; }
+    a:hover { text-decoration: underline; }
+    form > input[type=text], form > input[type=submit] { margin: 10px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    form { background-color: #fff; padding: 20px; border-radius: 8px; }
+    input[type=submit] { background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+    input[type=submit]:hover { background-color: #218838; }
+</style>"""
+
 @app.route("/")
 def index(req, resp):
     yield from picoweb.start_response(resp)
-    yield from resp.awrite("""<html><body>
+    yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
         <h1>Welcome to the Smart Sprinkler System</h1>
         <ul>
             <li><a href="/config">Configure Sprinkler</a></li>
             <li><a href="/telemetry">View Telemetry Data</a></li>
             <li><a href="/config.json">Download Configuration</a></li>
             <li><a href="/telemetry.csv">Download Telemetry Data</a></li>
+            <li><a href="/clear_telemetry">Clear Telemetry Data</a></li>
+            <li><a href="/stats">View System Statistics</a></li>
         </ul>
     </body></html>""")
 
@@ -115,19 +134,52 @@ def config(req, resp):
         # Load the existing configuration
         config_data = load_config()
         yield from picoweb.start_response(resp)
-        yield from resp.awrite("""<html><body>
+        yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
             <form method="POST" action="/config">
                 Times (comma-separated, 24hr format, e.g. 06:00,18:00):<br>
-                <input type="text" name="times" value="{times}"><br>
+                <input type="text" name="times" value="{config_data.get('times', '')}"><br>
                 Durations (comma-separated, minutes, e.g. 30,45):<br>
-                <input type="text" name="durations" value="{durations}"><br>
+                <input type="text" name="durations" value="{config_data.get('durations', '')}"><br>
                 Days (comma-separated, e.g. mon,tue,wed):<br>
-                <input type="text" name="days" value="{days}"><br><br>
+                <input type="text" name="days" value="{''.join(config_data.get('days', []))}"><br><br>
                 <input type="submit" value="Save">
             </form>
-        </body></html>""".format(times=config_data.get('times', ''),
-                                  durations=config_data.get('durations', ''),
-                                  days=','.join(config_data.get('days', []))))
+        </body></html>""")
+
+@app.route("/stats")
+def stats(req, resp):
+    yield from picoweb.start_response(resp)
+    # Get system statistics
+    mem_free = gc.mem_free()
+    uptime = utime.time()
+    # Format uptime into a more readable format
+    uptime_days = uptime // (24 * 3600)
+    uptime_hours = (uptime % (24 * 3600)) // 3600
+    uptime_minutes = (uptime % 3600) // 60
+    uptime_seconds = uptime % 60
+    formatted_uptime = "{} days, {} hours, {} minutes, {} seconds".format(uptime_days, uptime_hours, uptime_minutes, uptime_seconds)
+    # Get the last reboot time
+    last_reboot_time = myTime()
+    formatted_reboot_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(last_reboot_time[2], last_reboot_time[1], last_reboot_time[0], last_reboot_time[3], last_reboot_time[4])
+    yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
+        <h1>System Statistics</h1>
+        <ul>
+            <li>Free Memory: {mem_free} bytes</li>
+            <li>Uptime: {formatted_uptime}</li>
+            <li>Last Reboot: {formatted_reboot_time}</li>
+        </ul>
+        <form method="POST" action="/restart">
+            <input type="submit" value="Restart System">
+        </form>
+    </body></html>""")
+
+@app.route("/restart", methods=['POST'])
+def restart(req, resp):
+    yield from picoweb.start_response(resp)
+    sendTelemetry("System restart initiated.")
+    yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body><h1>Restarting system...</h1></body></html>""")
+    time.sleep(1)  # Sleep for a short while to allow the response to be sent before restarting
+    reset()
 
 # Add a route to serve the configuration file
 @app.route("/config.json")
@@ -144,14 +196,14 @@ def telemetry(req, resp):
         with open(TELEMETRY_FILE, 'r') as f:
             telemetry_data = f.readlines()
             telemetry_data.reverse()  # Reverse the list to show the most recent first
-            yield from resp.awrite("<html><head><meta http-equiv='refresh' content='10'></head><body><table>")
-            yield from resp.awrite("<tr><th>Date</th><th>Log Message</th></tr>")
+            yield from resp.awrite(f"""<html><head>{CSS_STYLE}<meta http-equiv='refresh' content='10'></head><body><table>
+                <tr><th>Date</th><th>Log Message</th></tr>""")
             for line in telemetry_data:
                 date, log_message = line.strip().split(',', 1)
                 yield from resp.awrite(f"<tr><td>{date}</td><td>{log_message}</td></tr>")
             yield from resp.awrite("</table></body></html>")
     except OSError:
-        yield from resp.awrite("<html><body><h1>Error: Telemetry file not found</h1></body></html>")
+        yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body><h1>Error: Telemetry file not found</h1></body></html>""")
 
 # Add a route to download the telemetry data
 @app.route("/telemetry.csv")
@@ -162,5 +214,18 @@ def download_telemetry(req, resp):
             yield from resp.awrite(f.read())
     except OSError:
         yield from resp.awrite("Error: Telemetry file not found")
+
+# Add a route to clear the telemetry data
+@app.route("/clear_telemetry", methods=['POST'])
+def clear_telemetry(req, resp):
+    try:
+        os.remove(TELEMETRY_FILE)  # Delete the file
+        sendTelemetry("Telemetry data cleared.")
+        yield from picoweb.start_response(resp)
+        yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body><h1>Telemetry data cleared.</h1></body></html>""")
+    except OSError:
+        sendTelemetry("Failed to clear telemetry data.")
+        yield from picoweb.start_response(resp)
+        yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body><h1>Error: Failed to clear telemetry data.</h1></body></html>""")
 
 app.run(debug=True, host="0.0.0.0", port=80)

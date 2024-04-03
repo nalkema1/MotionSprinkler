@@ -109,7 +109,6 @@ if wm.is_connected():
     if (not bypassupdate and data["day"] != currentTime["day"]) or alwayscheck_update:
         sendTelemetry("Checking for software update....")
         try:
-
             hasUpdated = otaUpdater.install_update_if_available()
             if hasUpdated:
                 machine.reset()
@@ -119,8 +118,9 @@ if wm.is_connected():
 
             with open('last_update.txt','w') as f:
                 ujson.dump(currentTime, f)
-        except:
-            sendTelemetry("OTA Updated failed")
+        except Exception as e:
+            error_message = f"OTA Update failed with error: {e}"
+            sendTelemetry(error_message)
 
 import app.website
 
