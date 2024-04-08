@@ -91,6 +91,10 @@ class OTAUpdater:
                 return True
         except ValueError as e:
             sendTelemetry(f'Error parsing version numbers: {e}')
+        except OSError as e:
+            sendTelemetry(f'Operating system error occurred: {e}')
+        except Exception as e:
+            sendTelemetry(f'An unexpected error occurred: {e}')
         
         return False
             
@@ -146,9 +150,13 @@ class OTAUpdater:
         sendTelemetry('Version {} downloaded to {}'.format(version, self.modulepath(self.new_version_dir)))
 
     def _download_all_files(self, version, sub_dir=''):
+        # Delete existing files in the new version directory before downloading
+        self._rmtree(self.modulepath(self.new_version_dir))
+        self.mkdir(self.modulepath(self.new_version_dir))
+
         url = 'https://api.github.com/repos/{}/contents{}{}{}?ref=refs/tags/{}'.format(self.github_repo, self.github_src_dir, self.main_dir, sub_dir, version)
-        gc.collect() 
-        sendTelemetry("url: {url}")
+        gc.collect()
+        sendTelemetry(f"url: {url}")
         file_list = self.http_client.get(url)
         file_list_json = file_list.json()
         sendTelemetry(file_list_json)
@@ -168,8 +176,20 @@ class OTAUpdater:
         file_list.close()
 
     def _download_file(self, version, gitPath, path):
-        self.http_client.get('https://raw.githubusercontent.com/{}/{}/{}'.format(self.github_repo, version, gitPath), saveToFile=path)
-
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                self.http_client.get('https://raw.githubusercontent.com/{}/{}/{}'.format(self.github_repo, version, gitPath), saveToFile=path)
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    sendTelemetry(f"Attempt {attempt + 1} failed to download file {gitPath}. Retrying...")
+                    continue
+                else:
+                    error_message = f"Failed to download file {gitPath} after {max_retries} attempts. Error: {e}"
+                    sendTelemetry(error_message)
+                    raise Exception(error_message)
+                    
     def _copy_secrets_file(self):
         if self.secrets_file:
             fromPath = self.modulepath(self.main_dir + '/' + self.secrets_file)

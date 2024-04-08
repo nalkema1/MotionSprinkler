@@ -97,13 +97,14 @@ CSS_STYLE = """<style>
     form { background-color: #fff; padding: 20px; border-radius: 8px; }
     input[type=submit] { background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
     input[type=submit]:hover { background-color: #218838; }
-    .menu-button { position: fixed; top: 15px; left: 15px; z-index: 100; }
-    .menu-button a { font-size: 30px; }
+    .menu-button { position: fixed; top: 5px; left: 5px; z-index: 100; background-color: orange; padding: 5px; border-radius: 5px; }
+    .menu-button a { font-size:12px; color: white; }
+    .menu-button a:hover { color: #ccc; }
 </style>"""
 
 # Define a function to render the menu button
 def render_menu_button():
-    return '<div class="menu-button"><a href="/">&#9776;</a></div>'
+    return '<div class="menu-button"><a href="/">Home</a></div>'
 
 @app.route("/")
 def index(req, resp):
@@ -170,6 +171,12 @@ def stats(req, resp):
     # Get the last reboot time
     last_reboot_time = myTime()
     formatted_reboot_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(last_reboot_time[2], last_reboot_time[1], last_reboot_time[0], last_reboot_time[3], last_reboot_time[4])
+    
+    # Get storage statistics
+    fs_stat = os.statvfs('/')
+    fs_size = fs_stat[0] * fs_stat[2]
+    fs_free = fs_stat[0] * fs_stat[3]
+    
     yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
         {render_menu_button()}
         <h1>System Statistics</h1>
@@ -177,6 +184,8 @@ def stats(req, resp):
             <li>Free Memory: {mem_free} bytes</li>
             <li>Uptime: {formatted_uptime}</li>
             <li>Last Reboot: {formatted_reboot_time}</li>
+            <li>Total Storage: {fs_size} bytes</li>
+            <li>Free Storage: {fs_free} bytes</li>
         </ul>
         <form method="POST" action="/restart">
             <input type="submit" value="Restart System">

@@ -15,12 +15,10 @@ from app.telemetry import sendTelemetry
 class WifiManager:
 
     def __init__(self, ssid = 'MotionSprinkler', password = 'motionsprinkler'):
-
         self.wlan_sta = network.WLAN(network.STA_IF)
-        self.wlan_sta.active(False)
         self.wlan_sta.active(True)
-        self.wlan_sta.config(dhcp_hostname='smartsprinker')
-        self.wlan_sta.config(reconnects = 5) # 5 tries max
+        self.wlan_sta.config(dhcp_hostname='smartsprinkler')  # Corrected hostname spelling
+        self.wlan_sta.config(reconnects=5)  # 5 tries max
         self.wlan_ap = network.WLAN(network.AP_IF)
         
         # Avoids simple mistakes with wifi ssid and password lengths, but doesn't check for forbidden or unsupported characters.
