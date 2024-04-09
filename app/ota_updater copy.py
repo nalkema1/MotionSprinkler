@@ -75,20 +75,29 @@ class OTAUpdater:
             bool: true if a new version is available, false otherwise
         """
 
-        (current_version, latest_version) = self._check_for_new_version()
-        if latest_version > current_version:
-            sendTelemetry('Updating to version {}...'.format(latest_version))
-            self._create_new_version_file(latest_version)
-            self._download_new_version(latest_version)
-            self._copy_secrets_file()
-            self._delete_old_version()
-            self._install_new_version()
-            return True
+        try:
+            (current_version, latest_version) = self._check_for_new_version()
+            # Parse versions to tuples of integers to compare them correctly
+            current_version_tuple = tuple(map(int, current_version.strip('v').split('.')))
+            latest_version_tuple = tuple(map(int, latest_version.strip('v').split('.')))
+
+            if latest_version_tuple > current_version_tuple:
+                sendTelemetry(f'Updating to version {latest_version}...')
+                self._create_new_version_file(latest_version)
+                self._download_new_version(latest_version)
+                self._copy_secrets_file()
+                self._delete_old_version()
+                self._install_new_version()
+                return True
+        except ValueError as e:
+            sendTelemetry(f'Error parsing version numbers: {e}')
+        except OSError as e:
+            sendTelemetry(f'Operating system error occurred: {e}')
+        except Exception as e:
+            sendTelemetry(f'An unexpected error occurred: {e}')
         
         return False
-
-
-    @staticmethod
+            
     def _using_network(ssid, password):
         import network
         sta_if = network.WLAN(network.STA_IF)
@@ -101,6 +110,7 @@ class OTAUpdater:
         sendTelemetry(f"network config: {sta_if.ifconfig()}")
 
     def _check_for_new_version(self):
+        sendTelemetry(f"current version file: {self.modulepath(self.main_dir)}")
         current_version = self.get_version(self.modulepath(self.main_dir))
         latest_version = self.get_latest_version()
 
@@ -110,17 +120,21 @@ class OTAUpdater:
         return (current_version, latest_version)
 
     def _create_new_version_file(self, latest_version):
-        self.mkdir(self.modulepath(self.new_version_dir))
-        with open(self.modulepath(self.new_version_dir + '/.version'), 'w') as versionfile:
-            versionfile.write(latest_version)
-            versionfile.close()
+        try:
+            self.mkdir(self.modulepath(self.new_version_dir))
+            with open(self.modulepath(self.new_version_dir + '/.version'), 'w') as versionfile:
+                versionfile.write(latest_version)
+        except Exception as e:
+            sendTelemetry(f'Failed to create new version file: {e}')
 
     def get_version(self, directory, version_file_name='.version'):
         if version_file_name in os.listdir(directory):
             with open(directory + '/' + version_file_name) as f:
                 version = f.read()
                 return version
-        return '0.0'
+        else:
+            sendTelemetry(f'File {version_file_name} not found in directory {directory}.')
+            return '0.0'
 
     def get_latest_version(self):
         latest_release = self.http_client.get('https://api.github.com/repos/{}/releases/latest'.format(self.github_repo))
@@ -141,9 +155,13 @@ class OTAUpdater:
         sendTelemetry('Version {} downloaded to {}'.format(version, self.modulepath(self.new_version_dir)))
 
     def _download_all_files(self, version, sub_dir=''):
+        # Delete existing files in the new version directory before downloading
+        self._rmtree(self.modulepath(self.new_version_dir))
+        self.mkdir(self.modulepath(self.new_version_dir))
+
         url = 'https://api.github.com/repos/{}/contents{}{}{}?ref=refs/tags/{}'.format(self.github_repo, self.github_src_dir, self.main_dir, sub_dir, version)
-        gc.collect() 
-        sendTelemetry("url: {url}")
+        gc.collect()
+        sendTelemetry(f"url: {url}")
         file_list = self.http_client.get(url)
         file_list_json = file_list.json()
         sendTelemetry(file_list_json)
@@ -176,7 +194,7 @@ class OTAUpdater:
                     error_message = f"Failed to download file {gitPath} after {max_retries} attempts. Error: {e}"
                     sendTelemetry(error_message)
                     raise Exception(error_message)
-                    
+
     def _copy_secrets_file(self):
         if self.secrets_file:
             fromPath = self.modulepath(self.main_dir + '/' + self.secrets_file)

@@ -69,7 +69,7 @@ def check_schedule(schedule):
                 return True
             else:
                 formatted_date_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(current_time[2], current_time[1], current_time[0], current_time[3], current_time[4])
-                sendTelemetry(f"Schedule checked at {formatted_date_time}, and no triggers activated")
+                # sendTelemetry(f"Schedule checked at {formatted_date_time}, and no triggers activated")
     return False
 
 # Function to continuously check the schedule and activate the sprinkler
@@ -255,4 +255,5 @@ def clear_telemetry(req, resp):
         yield from picoweb.start_response(resp)
         yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>{render_menu_button()}<h1>Error: Failed to clear telemetry data.</h1></body></html>""")
 
+sendTelemetry("Webserver started")
 app.run(debug=True, host="0.0.0.0", port=80)

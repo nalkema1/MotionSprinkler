@@ -44,8 +44,8 @@ def CheckSchedule(timer):
 
     if gc.mem_free() < 100000:
         gc.collect()
-    if gc.mem_free() < 40000:
-        sendTelemetry("low memory, resetting system")
+    if gc.mem_free() < 10000:
+        sendTelemetry(f"low memory, resetting system, free memory: {gc.mem_free()}, total memory: {gc.mem_alloc() + gc.mem_free()}")
         machine.reset()
 
     if time.ticks_diff(time.ticks_ms(), power_on) > 86400000:

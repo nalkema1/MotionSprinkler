@@ -2,7 +2,7 @@ import ntptime
 import time
 from app.telemetry import sendTelemetry
 
-def ntpsync(retries=10, retry_pause=.5):
+def ntpsync(retries=20, retry_pause=.5):
     ntptime.host = "us.pool.ntp.org"
     ntpsync = False
     for retries in range(retries):    

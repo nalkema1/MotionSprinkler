@@ -1,4 +1,5 @@
 import time
+import uos as os
 
 def myTime(UTC_OFFSET=-14400):
     """
@@ -6,7 +7,7 @@ def myTime(UTC_OFFSET=-14400):
     """
     return time.localtime(time.time() + UTC_OFFSET)
 
-def sendTelemetry(logdata):
+def sendTelemetry(logdata, force_new_file=False):
     if logdata is None or logdata == "None":
         return
 
@@ -24,14 +25,20 @@ def sendTelemetry(logdata):
     # Get the current date to create a filename
     filename = "telemetry.csv"
 
-    # Check if we need to recycle the file (i.e., if it's a new day)
-    if current_time[3] == 0 and current_time[4] < 1:  # Accessing tuple elements directly
-        # It's shortly after 12:00AM, overwrite the existing file
-        with open(filename, "w") as file:
+    # Check if the file size is greater than 15000 bytes and force a new file if it is
+    if os.stat(filename)[6] > 15000:
+        force_new_file = True
+
+    # Determine file mode based on force_new_file flag
+    file_mode = "w" if force_new_file else "a"
+
+    # Write the log data to the file
+    try:
+        with open(filename, file_mode) as file:
             file.write(formatted_logdata + "\n")
-    else:
-        # Write the log data to the file
-        with open(filename, "a") as file:
+    except OSError:
+        # If an error occurs, create a new file
+        with open(filename, "w") as file:
             file.write(formatted_logdata + "\n")
 
     return
