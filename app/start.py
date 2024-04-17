@@ -47,6 +47,7 @@ def CheckSchedule(timer):
     if gc.mem_free() < 10000:
         sendTelemetry(f"low memory, resetting system, free memory: {gc.mem_free()}, total memory: {gc.mem_alloc() + gc.mem_free()}")
         machine.reset()
+    ConnectToNetwork() # check network connection
 
     if time.ticks_diff(time.ticks_ms(), power_on) > 86400000:
         sendTelemetry("time for a daily reset")

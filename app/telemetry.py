@@ -1,5 +1,5 @@
 import time
-import uos as os
+import uos
 
 def myTime(UTC_OFFSET=-14400):
     """
@@ -25,8 +25,12 @@ def sendTelemetry(logdata, force_new_file=False):
     # Get the current date to create a filename
     filename = "telemetry.csv"
 
-    # Check if the file size is greater than 15000 bytes and force a new file if it is
-    if os.stat(filename)[6] > 15000:
+    # Check if the file exists and if the file size is greater than 15000 bytes and force a new file if it is
+    try:
+        if uos.stat(filename)[6] > 15000:
+            force_new_file = True
+    except OSError:
+        # If the file does not exist, we will create a new one anyway
         force_new_file = True
 
     # Determine file mode based on force_new_file flag
@@ -36,9 +40,7 @@ def sendTelemetry(logdata, force_new_file=False):
     try:
         with open(filename, file_mode) as file:
             file.write(formatted_logdata + "\n")
-    except OSError:
-        # If an error occurs, create a new file
-        with open(filename, "w") as file:
-            file.write(formatted_logdata + "\n")
+    except OSError as e:
+        print(f"Failed to write to file: {e}")
 
     return
