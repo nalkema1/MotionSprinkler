@@ -22,6 +22,19 @@ MicroPython firmware for an ESP32-based motion-activated sprinkler. A PIR sensor
 
 Two toggles at the top of `app/start.py`: `prod`, `bypassupdate`, `alwayscheck_update`. The motion handler is currently wired to `nonaction` (telemetry only) — switch to `myaction` to arm the relay.
 
+## HTTP endpoints (picoweb, port 80)
+
+Defined in [app/website.py](app/website.py):
+
+- `GET /` — menu
+- `GET/POST /config` — edit schedule (times, durations, days) stored in `sprinkler_config.json`
+- `GET/POST /manual` — HTML form to toggle relay
+- `GET/POST /api/sprinkler` — JSON API. `GET` returns `{"state":"on"|"off"}`. `POST` with form field `action=on|off` (or `?action=on` in the query string) flips the relay and returns the new state. 400 on invalid action. Each toggle is logged to telemetry.
+- `GET /stats`, `POST /restart` — system stats + reboot
+- `GET /config.json`, `GET /telemetry`, `GET /telemetry.csv`, `POST /clear_telemetry`
+
+The `/api/sprinkler` endpoint just flips GPIO 17 — it has no auto-off timer, so a scripted `on` stays on until something (API `off`, scheduled run, motion handler) changes it.
+
 ## Toolchain
 
 Development is done through Jupyter notebooks running the `jupyter_micropython_kernel` (MicroPython-over-USB). The `.env` venv hosts that kernel; it is **not** for running project code.

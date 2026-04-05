@@ -7,6 +7,24 @@ from app.timesync import myTime
 from app.telemetry import sendTelemetry
 import gc
 import os
+import urequests
+
+CONFIG_VERSION = 2
+WEEKDAY_STR = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+
+def empty_config():
+    return {
+        "version": CONFIG_VERSION,
+        "schedules": [],
+        "rain_skip": {
+            "enabled": False,
+            "threshold_mm": 2.5,
+            "latitude": 0.0,
+            "longitude": 0.0,
+            "last_check_date": "",
+            "last_check_mm": 0.0,
+        },
+    }
 
 app = picoweb.WebApp(__name__)
 
@@ -30,12 +48,27 @@ def load_config():
     global config_data_cache
     if config_data_cache is not None:
         return config_data_cache
+    loaded = None
     try:
         with open(CONFIG_FILE, 'r') as f:
-            config_data_cache = ujson.loads(f.read())
-            return config_data_cache
+            loaded = ujson.loads(f.read())
     except OSError:
-        return {}
+        loaded = None
+    if not loaded or loaded.get('version') != CONFIG_VERSION:
+        fresh = empty_config()
+        save_config(fresh)
+        return fresh
+    # Ensure rain_skip block exists with all keys
+    rs = loaded.get('rain_skip') or {}
+    defaults = empty_config()['rain_skip']
+    for k, v in defaults.items():
+        if k not in rs:
+            rs[k] = v
+    loaded['rain_skip'] = rs
+    if 'schedules' not in loaded:
+        loaded['schedules'] = []
+    config_data_cache = loaded
+    return config_data_cache
 
 # Helper function to save the configuration to the file
 def save_config(config):
@@ -44,33 +77,72 @@ def save_config(config):
         f.write(ujson.dumps(config))
     config_data_cache = config
 
-# Function to check if the current time matches the schedule
-def check_schedule(schedule):
+def today_str(current_time):
+    return "{:04d}-{:02d}-{:02d}".format(current_time[0], current_time[1], current_time[2])
+
+def should_skip_for_rain(config):
+    rs = config.get('rain_skip') or {}
+    if not rs.get('enabled'):
+        return False
+    lat = rs.get('latitude', 0.0)
+    lon = rs.get('longitude', 0.0)
+    if lat == 0.0 and lon == 0.0:
+        return False
+    threshold = rs.get('threshold_mm', 2.5)
+    current_time = myTime()
+    today = today_str(current_time)
+    mm = rs.get('last_check_mm', 0.0)
+    if rs.get('last_check_date') != today:
+        try:
+            url = "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=precipitation_sum&timezone=auto&start_date={}&end_date={}".format(lat, lon, today, today)
+            r = urequests.get(url)
+            data = r.json()
+            r.close()
+            mm = float(data['daily']['precipitation_sum'][0] or 0.0)
+            rs['last_check_date'] = today
+            rs['last_check_mm'] = mm
+            config['rain_skip'] = rs
+            save_config(config)
+            sendTelemetry("Rain check for {}: {} mm".format(today, mm))
+        except Exception as e:
+            sendTelemetry("Rain check failed: {}".format(e))
+            return False
+    return mm >= threshold
+
+# Function to check if the current time matches any schedule
+def check_schedule(config):
+    schedules = config.get('schedules') or []
+    if not schedules:
+        return False
     current_time = myTime()
     current_hour = current_time[3]
     current_minute = current_time[4]
-    current_weekday = current_time[6]  # 0 is Monday, 6 is Sunday
-
-    # Convert schedule times to tuples of (hour, minute)
-    schedule_times = [(int(t.split(':')[0]), int(t.split(':')[1])) for t in schedule['times'].split(',')]
-    schedule_days = schedule['days']  # List of days when the sprinkler should be active
-    schedule_durations = [int(d) for d in schedule['durations'].split(',')]  # List of durations in minutes
-
-    # Check if today is a scheduled day
-    weekday_str = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-    if weekday_str[current_weekday] in schedule_days:
-        for i, (hour, minute) in enumerate(schedule_times):
-            # Check if the current time matches the schedule time
-            if current_hour == hour and current_minute == minute:
-                # Turn on the sprinkler for the scheduled duration
-                formatted_date_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(current_time[2], current_time[1], current_time[0], current_time[3], current_time[4])
-                sendTelemetry(f"activating Trigger at: {formatted_date_time}")
-                activate_sprinker(schedule_durations[i] * 60)  # Convert minutes to seconds
-                return True
-            else:
-                formatted_date_time = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(current_time[2], current_time[1], current_time[0], current_time[3], current_time[4])
-                # sendTelemetry(f"Schedule checked at {formatted_date_time}, and no triggers activated")
-    return False
+    current_weekday = current_time[6]
+    today_name = WEEKDAY_STR[current_weekday]
+    fired = False
+    for s in schedules:
+        if not s.get('enabled'):
+            continue
+        if today_name not in s.get('days', []):
+            continue
+        t = s.get('time', '')
+        try:
+            h, m = t.split(':')
+            h = int(h); m = int(m)
+        except Exception:
+            continue
+        if current_hour != h or current_minute != m:
+            continue
+        name = s.get('name') or 'schedule {}'.format(s.get('id'))
+        if should_skip_for_rain(config):
+            rs = config.get('rain_skip') or {}
+            sendTelemetry("Skipping {} - rain today: {} mm (threshold {} mm)".format(name, rs.get('last_check_mm', 0.0), rs.get('threshold_mm')))
+            continue
+        duration = int(s.get('duration', 0))
+        sendTelemetry("Activating {} for {} min".format(name, duration))
+        activate_sprinker(duration * 60)
+        fired = True
+    return fired
 
 # Function to continuously check the schedule and activate the sprinkler
 def schedule_checker(timer):
@@ -123,39 +195,158 @@ def index(req, resp):
         </ul>
     </body></html>""")
 
+def render_schedule_block(s):
+    sid = s.get('id')
+    name = s.get('name', '')
+    t = s.get('time', '06:00')
+    dur = s.get('duration', 15)
+    days = s.get('days', []) or []
+    enabled_chk = 'checked' if s.get('enabled') else ''
+    day_boxes = ''
+    day_labels = [('mon', 'Mon'), ('tue', 'Tue'), ('wed', 'Wed'), ('thu', 'Thu'), ('fri', 'Fri'), ('sat', 'Sat'), ('sun', 'Sun')]
+    for dkey, dlabel in day_labels:
+        chk = 'checked' if dkey in days else ''
+        day_boxes += '<label style="margin-right:8px"><input type="checkbox" name="day_{}" {}> {}</label>'.format(dkey, chk, dlabel)
+    return (
+        '<div style="background:#fff;padding:12px;border-radius:8px;margin-bottom:10px">'
+        '<form method="POST" action="/config" style="display:inline-block;padding:0;background:transparent">'
+        '<input type="hidden" name="action" value="update">'
+        '<input type="hidden" name="id" value="{sid}">'
+        '<label><input type="checkbox" name="enabled" {en}> Enabled</label> &nbsp; '
+        'Name: <input type="text" name="name" value="{name}" style="width:140px"> &nbsp; '
+        'Time: <input type="time" name="time" value="{t}"> &nbsp; '
+        'Duration (min): <input type="number" name="duration" value="{dur}" min="1" max="240" style="width:70px"><br>'
+        '{days}<br>'
+        '<input type="submit" value="Save" style="padding:4px 10px">'
+        '</form>'
+        '<form method="POST" action="/config" style="display:inline-block;padding:0;background:transparent;margin-left:8px">'
+        '<input type="hidden" name="action" value="delete">'
+        '<input type="hidden" name="id" value="{sid}">'
+        '<input type="submit" value="Delete" style="background-color:#dc3545;padding:4px 10px">'
+        '</form>'
+        '</div>'
+    ).format(sid=sid, en=enabled_chk, name=name, t=t, dur=dur, days=day_boxes)
+
+def render_add_form():
+    day_labels = [('mon', 'Mon'), ('tue', 'Tue'), ('wed', 'Wed'), ('thu', 'Thu'), ('fri', 'Fri'), ('sat', 'Sat'), ('sun', 'Sun')]
+    day_boxes = ''
+    for dkey, dlabel in day_labels:
+        day_boxes += '<label style="margin-right:8px"><input type="checkbox" name="day_{}"> {}</label>'.format(dkey, dlabel)
+    return (
+        '<form method="POST" action="/config">'
+        '<input type="hidden" name="action" value="add">'
+        'Name: <input type="text" name="name" value="" style="width:140px"> &nbsp; '
+        'Time: <input type="time" name="time" value="06:00"> &nbsp; '
+        'Duration (min): <input type="number" name="duration" value="15" min="1" max="240" style="width:70px"><br>'
+        + day_boxes +
+        '<br><input type="submit" value="Add Schedule">'
+        '</form>'
+    )
+
+def render_rain_form(rs):
+    en = 'checked' if rs.get('enabled') else ''
+    threshold = rs.get('threshold_mm', 2.5)
+    lat = rs.get('latitude', 0.0)
+    lon = rs.get('longitude', 0.0)
+    last_date = rs.get('last_check_date', '') or 'never'
+    last_mm = rs.get('last_check_mm', 0.0)
+    return (
+        '<form method="POST" action="/config">'
+        '<input type="hidden" name="action" value="rain_config">'
+        '<label><input type="checkbox" name="enabled" {en}> Skip schedules when it has rained today</label><br>'
+        'Threshold (mm): <input type="number" name="threshold_mm" step="0.1" value="{th}" style="width:80px"> &nbsp; '
+        'Latitude: <input type="number" name="latitude" step="0.0001" value="{lat}" style="width:120px"> &nbsp; '
+        'Longitude: <input type="number" name="longitude" step="0.0001" value="{lon}" style="width:120px"><br>'
+        '<small>Last check: {ld} &mdash; {lm} mm</small><br>'
+        '<input type="submit" value="Save Rain Settings">'
+        '</form>'
+    ).format(en=en, th=threshold, lat=lat, lon=lon, ld=last_date, lm=last_mm)
+
 @app.route("/config", methods=['GET', 'POST'])
 def config(req, resp):
-    global config_data_cache
+    cfg = load_config()
     if req.method == "POST":
         yield from req.read_form_data()
-        # Save the configuration to a file
-        # Convert the days from a string with commas to a list
-        days_str = req.form.get('days', '')
-        days_list = [day.strip() for day in days_str.split(',')] if days_str else []
-        config_data = {
-            'times': req.form.get('times', ''),
-            'durations': req.form.get('durations', ''),
-            'days': days_list
-        }
-        save_config(config_data)
-        yield from picoweb.start_response(resp)
-        yield from resp.awrite("Configuration saved.")
-    else:
-        # Load the existing configuration
-        config_data = load_config()
-        yield from picoweb.start_response(resp)
-        yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
-            {render_menu_button()}
-            <form method="POST" action="/config">
-                Times (comma-separated, 24hr format, e.g. 06:00,18:00):<br>
-                <input type="text" name="times" value="{config_data.get('times', '')}"><br>
-                Durations (comma-separated, minutes, e.g. 30,45):<br>
-                <input type="text" name="durations" value="{config_data.get('durations', '')}"><br>
-                Days (comma-separated, e.g. mon,tue,wed):<br>
-                <input type="text" name="days" value="{','.join(config_data.get('days', []))}"><br><br>
-                <input type="submit" value="Save">
-            </form>
-        </body></html>""")
+        action = req.form.get('action', '')
+        if action == 'add':
+            new_id = 1
+            if cfg['schedules']:
+                new_id = max(s.get('id', 0) for s in cfg['schedules']) + 1
+            days = [d for d in WEEKDAY_STR if req.form.get('day_' + d)]
+            try:
+                duration = int(req.form.get('duration', '15') or 15)
+            except Exception:
+                duration = 15
+            cfg['schedules'].append({
+                'id': new_id,
+                'name': req.form.get('name', '') or 'Schedule {}'.format(new_id),
+                'time': req.form.get('time', '06:00') or '06:00',
+                'duration': duration,
+                'days': days,
+                'enabled': True,
+            })
+            save_config(cfg)
+        elif action == 'delete':
+            try:
+                del_id = int(req.form.get('id', '0'))
+                cfg['schedules'] = [s for s in cfg['schedules'] if s.get('id') != del_id]
+                save_config(cfg)
+            except Exception:
+                pass
+        elif action == 'update':
+            try:
+                up_id = int(req.form.get('id', '0'))
+                for s in cfg['schedules']:
+                    if s.get('id') == up_id:
+                        s['enabled'] = bool(req.form.get('enabled'))
+                        s['name'] = req.form.get('name', s.get('name', ''))
+                        s['time'] = req.form.get('time', s.get('time', '06:00'))
+                        try:
+                            s['duration'] = int(req.form.get('duration', s.get('duration', 15)))
+                        except Exception:
+                            pass
+                        s['days'] = [d for d in WEEKDAY_STR if req.form.get('day_' + d)]
+                        break
+                save_config(cfg)
+            except Exception:
+                pass
+        elif action == 'rain_config':
+            rs = cfg.get('rain_skip') or {}
+            rs['enabled'] = bool(req.form.get('enabled'))
+            try:
+                rs['threshold_mm'] = float(req.form.get('threshold_mm', '2.5') or 2.5)
+            except Exception:
+                pass
+            try:
+                rs['latitude'] = float(req.form.get('latitude', '0') or 0)
+                rs['longitude'] = float(req.form.get('longitude', '0') or 0)
+            except Exception:
+                pass
+            rs['last_check_date'] = ''
+            rs['last_check_mm'] = 0.0
+            cfg['rain_skip'] = rs
+            save_config(cfg)
+        # re-load (cache is up to date) and fall through to render
+        cfg = load_config()
+    # Render page
+    schedules_html = ''
+    for s in cfg.get('schedules', []):
+        schedules_html += render_schedule_block(s)
+    if not schedules_html:
+        schedules_html = '<p><em>No schedules yet.</em></p>'
+    rain_html = render_rain_form(cfg.get('rain_skip') or {})
+    add_html = render_add_form()
+    yield from picoweb.start_response(resp)
+    yield from resp.awrite('<html><head>' + CSS_STYLE + '</head><body>')
+    yield from resp.awrite(render_menu_button())
+    yield from resp.awrite('<h1>Sprinkler Configuration</h1>')
+    yield from resp.awrite('<h2>Rain Skip</h2>')
+    yield from resp.awrite(rain_html)
+    yield from resp.awrite('<h2>Schedules</h2>')
+    yield from resp.awrite(schedules_html)
+    yield from resp.awrite('<h2>Add New Schedule</h2>')
+    yield from resp.awrite(add_html)
+    yield from resp.awrite('</body></html>')
 
 @app.route("/manual", methods=['GET', 'POST'])
 def manual(req, resp):
@@ -190,6 +381,37 @@ def manual(req, resp):
             <input type="submit" value="Turn OFF" style="background-color:#dc3545;">
         </form>
     </body></html>""")
+
+@app.route("/api/sprinkler", methods=['GET', 'POST'])
+def api_sprinkler(req, resp):
+    relay2 = Pin(17, Pin.OUT)
+    action = None
+    if req.method == "POST":
+        try:
+            yield from req.read_form_data()
+            action = req.form.get('action', '')
+        except Exception:
+            action = ''
+        if not action:
+            # Fall back to query string (?action=on|off)
+            qs = getattr(req, 'qs', '') or ''
+            for part in qs.split('&'):
+                if part.startswith('action='):
+                    action = part.split('=', 1)[1]
+                    break
+        if action == "on":
+            relay2.value(1)
+            sendTelemetry("Sprinkler turned ON via API")
+        elif action == "off":
+            relay2.value(0)
+            sendTelemetry("Sprinkler turned OFF via API")
+        else:
+            yield from picoweb.start_response(resp, status="400", content_type="application/json")
+            yield from resp.awrite(ujson.dumps({"error": "action must be 'on' or 'off'"}))
+            return
+    state = "on" if relay2.value() == 1 else "off"
+    yield from picoweb.start_response(resp, content_type="application/json")
+    yield from resp.awrite(ujson.dumps({"state": state}))
 
 @app.route("/stats")
 def stats(req, resp):
