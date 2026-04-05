@@ -174,12 +174,13 @@ def manual(req, resp):
             message = "Sprinkler turned OFF."
     state = "ON" if relay2.value() == 1 else "OFF"
     state_color = "#28a745" if state == "ON" else "#888"
+    message_html = "<p><em>" + message + "</em></p>" if message else ""
     yield from picoweb.start_response(resp)
     yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
         {render_menu_button()}
         <h1>Manual Sprinkler Control</h1>
         <p>Current state: <strong style="color:{state_color};">{state}</strong></p>
-        {f'<p><em>{message}</em></p>' if message else ''}
+        {message_html}
         <form method="POST" action="/manual" style="display:inline-block; margin-right:10px;">
             <input type="hidden" name="action" value="on">
             <input type="submit" value="Turn ON" style="background-color:#28a745;">
