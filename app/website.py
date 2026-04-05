@@ -114,6 +114,7 @@ def index(req, resp):
         <h1>Welcome to the Smart Sprinkler System</h1>
         <ul>
             <li><a href="/config">Configure Sprinkler</a></li>
+            <li><a href="/manual">Manual Control</a></li>
             <li><a href="/telemetry">View Telemetry Data</a></li>
             <li><a href="/config.json">Download Configuration</a></li>
             <li><a href="/telemetry.csv">Download Telemetry Data</a></li>
@@ -155,6 +156,39 @@ def config(req, resp):
                 <input type="submit" value="Save">
             </form>
         </body></html>""")
+
+@app.route("/manual", methods=['GET', 'POST'])
+def manual(req, resp):
+    relay2 = Pin(17, Pin.OUT)
+    message = ""
+    if req.method == "POST":
+        yield from req.read_form_data()
+        action = req.form.get('action', '')
+        if action == "on":
+            relay2.value(1)
+            sendTelemetry("Sprinkler manually turned ON")
+            message = "Sprinkler turned ON."
+        elif action == "off":
+            relay2.value(0)
+            sendTelemetry("Sprinkler manually turned OFF")
+            message = "Sprinkler turned OFF."
+    state = "ON" if relay2.value() == 1 else "OFF"
+    state_color = "#28a745" if state == "ON" else "#888"
+    yield from picoweb.start_response(resp)
+    yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
+        {render_menu_button()}
+        <h1>Manual Sprinkler Control</h1>
+        <p>Current state: <strong style="color:{state_color};">{state}</strong></p>
+        {f'<p><em>{message}</em></p>' if message else ''}
+        <form method="POST" action="/manual" style="display:inline-block; margin-right:10px;">
+            <input type="hidden" name="action" value="on">
+            <input type="submit" value="Turn ON" style="background-color:#28a745;">
+        </form>
+        <form method="POST" action="/manual" style="display:inline-block;">
+            <input type="hidden" name="action" value="off">
+            <input type="submit" value="Turn OFF" style="background-color:#dc3545;">
+        </form>
+    </body></html>""")
 
 @app.route("/stats")
 def stats(req, resp):
