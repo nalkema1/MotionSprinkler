@@ -12,6 +12,47 @@ import urequests
 CONFIG_VERSION = 2
 WEEKDAY_STR = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
+def get_current_version():
+    try:
+        with open('app/.version', 'r') as f:
+            return f.read().strip()
+    except Exception:
+        return 'unknown'
+
+# Manual one-shot off timer state
+_manual_timer = None
+_manual_off_at = 0  # epoch seconds when the timer will expire (0 = no timer)
+
+def _manual_clear_timer():
+    global _manual_timer, _manual_off_at
+    if _manual_timer is not None:
+        try:
+            _manual_timer.deinit()
+        except Exception:
+            pass
+    _manual_timer = None
+    _manual_off_at = 0
+
+def _manual_off_callback(t):
+    global _manual_timer, _manual_off_at
+    try:
+        Pin(17, Pin.OUT).value(0)
+        sendTelemetry("Manual timer expired, sprinkler OFF")
+    except Exception as e:
+        sendTelemetry("Manual timer callback error: {}".format(e))
+    _manual_timer = None
+    _manual_off_at = 0
+
+def manual_on_for(minutes):
+    global _manual_timer, _manual_off_at
+    _manual_clear_timer()
+    Pin(17, Pin.OUT).value(1)
+    period_ms = int(minutes * 60 * 1000)
+    _manual_off_at = int(time.time()) + int(minutes * 60)
+    _manual_timer = Timer(1)
+    _manual_timer.init(period=period_ms, mode=Timer.ONE_SHOT, callback=_manual_off_callback)
+    sendTelemetry("Sprinkler manually turned ON for {} min".format(minutes))
+
 def empty_config():
     return {
         "version": CONFIG_VERSION,
@@ -356,29 +397,55 @@ def manual(req, resp):
         yield from req.read_form_data()
         action = req.form.get('action', '')
         if action == "on":
+            _manual_clear_timer()
             relay2.value(1)
             sendTelemetry("Sprinkler manually turned ON")
             message = "Sprinkler turned ON."
+        elif action == "on_timed":
+            try:
+                minutes = float(req.form.get('minutes', '5') or 5)
+            except Exception:
+                minutes = 5
+            if minutes <= 0:
+                minutes = 1
+            if minutes > 240:
+                minutes = 240
+            manual_on_for(minutes)
+            message = "Sprinkler turned ON for {} min.".format(minutes)
         elif action == "off":
+            _manual_clear_timer()
             relay2.value(0)
             sendTelemetry("Sprinkler manually turned OFF")
             message = "Sprinkler turned OFF."
     state = "ON" if relay2.value() == 1 else "OFF"
     state_color = "#28a745" if state == "ON" else "#888"
     message_html = "<p><em>" + message + "</em></p>" if message else ""
+    timer_html = ""
+    if _manual_off_at:
+        remaining = _manual_off_at - int(time.time())
+        if remaining > 0:
+            mins = remaining // 60
+            secs = remaining % 60
+            timer_html = "<p>Auto-off in: <strong>{}m {}s</strong></p>".format(mins, secs)
     yield from picoweb.start_response(resp)
     yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
         {render_menu_button()}
         <h1>Manual Sprinkler Control</h1>
         <p>Current state: <strong style="color:{state_color};">{state}</strong></p>
+        {timer_html}
         {message_html}
         <form method="POST" action="/manual" style="display:inline-block; margin-right:10px;">
             <input type="hidden" name="action" value="on">
             <input type="submit" value="Turn ON" style="background-color:#28a745;">
         </form>
-        <form method="POST" action="/manual" style="display:inline-block;">
+        <form method="POST" action="/manual" style="display:inline-block; margin-right:10px;">
             <input type="hidden" name="action" value="off">
             <input type="submit" value="Turn OFF" style="background-color:#dc3545;">
+        </form>
+        <form method="POST" action="/manual" style="display:inline-block;">
+            <input type="hidden" name="action" value="on_timed">
+            Minutes: <input type="number" name="minutes" value="5" min="1" max="240" step="1" style="width:70px">
+            <input type="submit" value="Turn ON for N min" style="background-color:#007bff;">
         </form>
     </body></html>""")
 
@@ -434,10 +501,12 @@ def stats(req, resp):
     fs_size = fs_stat[0] * fs_stat[2]
     fs_free = fs_stat[0] * fs_stat[3]
     
+    current_version = get_current_version()
     yield from resp.awrite(f"""<html><head>{CSS_STYLE}</head><body>
         {render_menu_button()}
         <h1>System Statistics</h1>
         <ul>
+            <li>Firmware Version: {current_version}</li>
             <li>Free Memory: {mem_free} bytes</li>
             <li>Uptime: {formatted_uptime}</li>
             <li>Last Reboot: {formatted_reboot_time}</li>
