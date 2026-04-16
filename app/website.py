@@ -118,37 +118,91 @@ def save_config(config):
         f.write(ujson.dumps(config))
     config_data_cache = config
 
+RAIN_HISTORY_FILE = 'rain_history.csv'
+RAIN_HISTORY_MAX_LINES = 365
+
 def today_str(current_time):
     return "{:04d}-{:02d}-{:02d}".format(current_time[0], current_time[1], current_time[2])
+
+def _append_rain_history(date_str, mm):
+    """Append or update today's rain entry. Overwrites the same-date row if present."""
+    lines = []
+    try:
+        with open(RAIN_HISTORY_FILE, 'r') as f:
+            lines = f.readlines()
+    except OSError:
+        lines = []
+    # Drop any existing row for this date, then append fresh
+    kept = [ln for ln in lines if not ln.startswith(date_str + ',')]
+    kept.append("{},{}\n".format(date_str, mm))
+    # Trim to max lines (keep newest at tail)
+    if len(kept) > RAIN_HISTORY_MAX_LINES:
+        kept = kept[-RAIN_HISTORY_MAX_LINES:]
+    try:
+        with open(RAIN_HISTORY_FILE, 'w') as f:
+            for ln in kept:
+                f.write(ln)
+    except Exception as e:
+        sendTelemetry("Rain history write failed: {}".format(e))
+
+def do_rain_check(config, force=False):
+    """Fetch today's precipitation from Open-Meteo. Returns mm or None on failure.
+    If force=False and today is already cached, returns the cached value without calling the API."""
+    rs = config.get('rain_skip') or {}
+    lat = rs.get('latitude', 0.0)
+    lon = rs.get('longitude', 0.0)
+    if lat == 0.0 and lon == 0.0:
+        return None
+    current_time = myTime()
+    today = today_str(current_time)
+    if not force and rs.get('last_check_date') == today:
+        return rs.get('last_check_mm', 0.0)
+    try:
+        url = "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=precipitation_sum&timezone=auto&start_date={}&end_date={}".format(lat, lon, today, today)
+        r = urequests.get(url)
+        data = r.json()
+        r.close()
+        mm = float(data['daily']['precipitation_sum'][0] or 0.0)
+        rs['last_check_date'] = today
+        rs['last_check_mm'] = mm
+        config['rain_skip'] = rs
+        save_config(config)
+        _append_rain_history(today, mm)
+        sendTelemetry("Rain check for {}: {} mm".format(today, mm))
+        return mm
+    except Exception as e:
+        sendTelemetry("Rain check failed: {}".format(e))
+        return None
 
 def should_skip_for_rain(config):
     rs = config.get('rain_skip') or {}
     if not rs.get('enabled'):
         return False
+    threshold = rs.get('threshold_mm', 2.5)
+    mm = do_rain_check(config, force=False)
+    if mm is None:
+        return False
+    return mm >= threshold
+
+def daily_rain_check_if_due(config):
+    """Called from schedule_checker every 30s. Performs one rain check per day
+    once we've rolled past the configured collection hour (default 1 AM local)."""
+    rs = config.get('rain_skip') or {}
+    if not rs.get('enabled'):
+        return
     lat = rs.get('latitude', 0.0)
     lon = rs.get('longitude', 0.0)
     if lat == 0.0 and lon == 0.0:
-        return False
-    threshold = rs.get('threshold_mm', 2.5)
+        return
     current_time = myTime()
     today = today_str(current_time)
-    mm = rs.get('last_check_mm', 0.0)
-    if rs.get('last_check_date') != today:
-        try:
-            url = "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=precipitation_sum&timezone=auto&start_date={}&end_date={}".format(lat, lon, today, today)
-            r = urequests.get(url)
-            data = r.json()
-            r.close()
-            mm = float(data['daily']['precipitation_sum'][0] or 0.0)
-            rs['last_check_date'] = today
-            rs['last_check_mm'] = mm
-            config['rain_skip'] = rs
-            save_config(config)
-            sendTelemetry("Rain check for {}: {} mm".format(today, mm))
-        except Exception as e:
-            sendTelemetry("Rain check failed: {}".format(e))
-            return False
-    return mm >= threshold
+    if rs.get('last_check_date') == today:
+        return
+    # Only auto-check after 1 AM local — gives Open-Meteo time to finalize yesterday's total
+    # while still running at least once per day.
+    if current_time[3] < 1:
+        return
+    do_rain_check(config, force=False)
 
 # Function to check if the current time matches any schedule
 def check_schedule(config):
@@ -189,6 +243,7 @@ def check_schedule(config):
 def schedule_checker(timer):
     config_data = load_config()
     if config_data:
+        daily_rain_check_if_due(config_data)
         check_schedule(config_data)
 
 # Set up a timer to periodically check the schedule
@@ -301,7 +356,32 @@ def render_rain_form(rs):
         '<small>Last check: {ld} &mdash; {lm} mm</small><br>'
         '<input type="submit" value="Save Rain Settings">'
         '</form>'
+        '<form method="POST" action="/config" style="margin-top:6px">'
+        '<input type="hidden" name="action" value="rain_check_now">'
+        '<input type="submit" value="Check Rain Now" style="background-color:#007bff">'
+        '</form>'
     ).format(en=en, th=threshold, lat=lat, lon=lon, ld=last_date, lm=last_mm)
+
+def render_rain_history():
+    try:
+        with open(RAIN_HISTORY_FILE, 'r') as f:
+            lines = f.readlines()
+    except OSError:
+        return '<p><em>No rain history recorded yet.</em></p>'
+    if not lines:
+        return '<p><em>No rain history recorded yet.</em></p>'
+    lines = lines[-14:]  # last 14 days
+    lines.reverse()
+    rows = ''
+    for ln in lines:
+        parts = ln.strip().split(',')
+        if len(parts) >= 2:
+            rows += '<tr><td>{}</td><td>{} mm</td></tr>'.format(parts[0], parts[1])
+    return (
+        '<table style="width:auto"><tr><th>Date</th><th>Rain</th></tr>'
+        + rows + '</table>'
+        '<p><small><a href="/rain_history.csv">Download full history</a></small></p>'
+    )
 
 @app.route("/config", methods=['GET', 'POST'])
 def config(req, resp):
@@ -351,6 +431,8 @@ def config(req, resp):
                 save_config(cfg)
             except Exception:
                 pass
+        elif action == 'rain_check_now':
+            do_rain_check(cfg, force=True)
         elif action == 'rain_config':
             rs = cfg.get('rain_skip') or {}
             rs['enabled'] = bool(req.form.get('enabled'))
@@ -383,6 +465,8 @@ def config(req, resp):
     yield from resp.awrite('<h1>Sprinkler Configuration</h1>')
     yield from resp.awrite('<h2>Rain Skip</h2>')
     yield from resp.awrite(rain_html)
+    yield from resp.awrite('<h3>Rain History (last 14 days)</h3>')
+    yield from resp.awrite(render_rain_history())
     yield from resp.awrite('<h2>Schedules</h2>')
     yield from resp.awrite(schedules_html)
     yield from resp.awrite('<h2>Add New Schedule</h2>')
@@ -452,33 +536,53 @@ def manual(req, resp):
 @app.route("/api/sprinkler", methods=['GET', 'POST'])
 def api_sprinkler(req, resp):
     relay2 = Pin(17, Pin.OUT)
-    action = None
     if req.method == "POST":
-        try:
-            yield from req.read_form_data()
-            action = req.form.get('action', '')
-        except Exception:
+        qs = getattr(req, 'qs', '') or ''
+        # Check for ?turnonfor=N
+        turnonfor_str = ''
+        for part in qs.split('&'):
+            if part.startswith('turnonfor='):
+                turnonfor_str = part.split('=', 1)[1]
+                break
+        if turnonfor_str:
+            try:
+                seconds = int(turnonfor_str)
+            except Exception:
+                seconds = 0
+            if seconds <= 0:
+                yield from picoweb.start_response(resp, status="400", content_type="application/json")
+                yield from resp.awrite(ujson.dumps({"error": "turnonfor must be a positive integer (seconds)"}))
+                return
+            if seconds > 14400:
+                seconds = 14400
+            manual_on_for(seconds / 60.0)
+        else:
+            # Check for ?action=on|off
             action = ''
-        if not action:
-            # Fall back to query string (?action=on|off)
-            qs = getattr(req, 'qs', '') or ''
             for part in qs.split('&'):
                 if part.startswith('action='):
                     action = part.split('=', 1)[1]
                     break
-        if action == "on":
-            relay2.value(1)
-            sendTelemetry("Sprinkler turned ON via API")
-        elif action == "off":
-            relay2.value(0)
-            sendTelemetry("Sprinkler turned OFF via API")
-        else:
-            yield from picoweb.start_response(resp, status="400", content_type="application/json")
-            yield from resp.awrite(ujson.dumps({"error": "action must be 'on' or 'off'"}))
-            return
+            if action == "on":
+                _manual_clear_timer()
+                relay2.value(1)
+                sendTelemetry("Sprinkler turned ON via API")
+            elif action == "off":
+                _manual_clear_timer()
+                relay2.value(0)
+                sendTelemetry("Sprinkler turned OFF via API")
+            else:
+                yield from picoweb.start_response(resp, status="400", content_type="application/json")
+                yield from resp.awrite(ujson.dumps({"error": "use ?action=on|off or ?turnonfor=SECONDS"}))
+                return
     state = "on" if relay2.value() == 1 else "off"
+    result = {"state": state}
+    if _manual_off_at:
+        remaining = _manual_off_at - int(time.time())
+        if remaining > 0:
+            result["auto_off_in_seconds"] = remaining
     yield from picoweb.start_response(resp, content_type="application/json")
-    yield from resp.awrite(ujson.dumps({"state": state}))
+    yield from resp.awrite(ujson.dumps(result))
 
 @app.route("/stats")
 def stats(req, resp):
@@ -532,6 +636,17 @@ def config_json(req, resp):
     yield from picoweb.start_response(resp, content_type="application/json")
     config_data = load_config()
     yield from resp.awrite(ujson.dumps(config_data))
+
+# Add a route to download the rain history
+@app.route("/rain_history.csv")
+def download_rain_history(req, resp):
+    yield from picoweb.start_response(resp, content_type="text/csv")
+    yield from resp.awrite("date,mm\n")
+    try:
+        with open(RAIN_HISTORY_FILE, 'r') as f:
+            yield from resp.awrite(f.read())
+    except OSError:
+        pass
 
 # Add a route to serve the telemetry data
 @app.route("/telemetry")
