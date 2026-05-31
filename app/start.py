@@ -123,6 +123,7 @@ if wm.is_connected():
             error_message = f"OTA Update failed with error: {e}"
             sendTelemetry(error_message)
 
+gc.collect()  # free heap before compiling the web server module
 import app.website
 
 print("starting main loop")

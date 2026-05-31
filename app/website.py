@@ -286,40 +286,32 @@ _sched_timer = Timer(-1)
 _sched_timer.init(period=30000, mode=Timer.PERIODIC, callback=schedule_checker)
 
 # ── CSS & page chrome ─────────────────────────────────────────────────────────
-CSS = """<style>
-:root{--gd:#2d6a4f;--gm:#52b788;--gl:#d8f3dc;--earth:#6b4226;--bg:#eef7ee;--w:#fff;--txt:#1b4332;--red:#c0392b;--blu:#2471a3}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;background:var(--bg);color:var(--txt)}
-nav{background:var(--gd);padding:10px 14px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-.brand{color:#fff;font-weight:700;font-size:17px;margin-right:8px;text-decoration:none}
-nav a{color:#d8f3dc;text-decoration:none;padding:5px 10px;border-radius:4px;font-size:14px}
-nav a:hover{background:rgba(255,255,255,.15)}
-main{padding:14px;max-width:860px;margin:0 auto}
-h1{font-size:20px;margin:12px 0 10px;color:var(--gd)}
-h2{font-size:16px;margin:12px 0 6px;color:var(--gd);border-bottom:2px solid var(--gl);padding-bottom:3px}
-h3{font-size:14px;margin:0 0 6px;color:var(--earth);font-weight:600}
-.card{background:var(--w);border-radius:10px;padding:14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:8px}
-.badge-on{color:#fff;background:var(--gm);padding:2px 10px;border-radius:12px;font-size:13px;font-weight:600;display:inline-block}
-.badge-off{color:#fff;background:#9e9e9e;padding:2px 10px;border-radius:12px;font-size:13px;display:inline-block}
-input[type=text],input[type=number],input[type=time],select{padding:5px 8px;border:1px solid #b0c4b1;border-radius:5px;font-size:13px;background:#fff;max-width:100%}
-input[type=submit]{padding:7px 13px;border:none;border-radius:6px;cursor:pointer;font-size:13px;color:#fff;background:var(--gm);margin:2px}
-input[type=submit]:hover{opacity:.85}
-input[type=submit].red{background:var(--red)}
-input[type=submit].blu{background:var(--blu)}
-table{width:100%;border-collapse:collapse;margin-top:4px}
-th,td{border:1px solid #c8e6c9;padding:6px 8px;text-align:left;font-size:13px}
-th{background:var(--gl)}
-.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
-label{font-size:13px;display:inline-flex;align-items:center;gap:3px}
-small{color:#666;font-size:12px}
-p{margin:5px 0;font-size:14px}
-ul{list-style:none;padding:0}
-li{margin:5px 0;font-size:14px}
-a{color:var(--gd)}
-a:hover{text-decoration:underline}
-.msg{background:#d4edda;border:1px solid #c3e6cb;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:8px}
-</style>"""
+CSS = ('<style>'
+'*{box-sizing:border-box;margin:0;padding:0}'
+'body{font-family:Arial,sans-serif;background:#eef7ee;color:#1b4332}'
+'nav{background:#2d6a4f;padding:8px 12px;display:flex;flex-wrap:wrap;gap:4px}'
+'.brand{color:#fff;font-weight:bold;font-size:16px;margin-right:8px;text-decoration:none}'
+'nav a{color:#d8f3dc;text-decoration:none;padding:4px 9px;border-radius:4px;font-size:14px}'
+'nav a:hover{background:rgba(255,255,255,.2)}'
+'main{padding:12px;max-width:840px;margin:0 auto}'
+'h1,h2,h3{color:#2d6a4f;margin:8px 0 5px}'
+'h1{font-size:19px}h2{font-size:15px;border-bottom:2px solid #d8f3dc;padding-bottom:2px}'
+'h3{font-size:13px;color:#6b4226}'
+'.card{background:#fff;border-radius:8px;padding:12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.1)}'
+'.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px}'
+'.on{color:#fff;background:#52b788;padding:2px 8px;border-radius:10px;font-size:12px}'
+'.off{color:#fff;background:#999;padding:2px 8px;border-radius:10px;font-size:12px}'
+'input[type=text],input[type=number],input[type=time],select{padding:4px 7px;border:1px solid #b0c4b1;border-radius:4px;font-size:13px;max-width:100%}'
+'input[type=submit]{padding:6px 12px;border:none;border-radius:5px;cursor:pointer;font-size:13px;color:#fff;background:#52b788;margin:2px}'
+'input[type=submit].red{background:#c0392b}input[type=submit].blu{background:#2471a3}'
+'table{width:100%;border-collapse:collapse}'
+'th,td{border:1px solid #c8e6c9;padding:5px;font-size:13px}th{background:#d8f3dc}'
+'.row{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:5px}'
+'label{font-size:13px}small{color:#666;font-size:11px}'
+'p,li{margin:4px 0;font-size:13px}ul{list-style:none;padding:0}'
+'a{color:#2d6a4f}a:hover{text-decoration:underline}'
+'.msg{background:#d4edda;border:1px solid #c3e6cb;padding:7px;border-radius:5px;font-size:13px;margin-bottom:7px}'
+'</style>')
 
 META = '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
 
@@ -350,7 +342,7 @@ def index(req, resp):
         rid = r['id']
         name = r.get('name', 'Zone {}'.format(rid))
         state = Pin(gpio, Pin.OUT).value()
-        badge = '<span class="badge-on">ON</span>' if state else '<span class="badge-off">OFF</span>'
+        badge = '<span class="on">ON</span>' if state else '<span class="off">OFF</span>'
         timer_html = ''
         if rid in _zone_timers:
             rem = _zone_timers[rid]['off_at'] - int(time.time())
@@ -416,7 +408,7 @@ def manual(req, resp):
         rid = r['id']
         name = r.get('name', 'Zone {}'.format(rid))
         state = Pin(gpio, Pin.OUT).value()
-        badge = '<span class="badge-on">ON</span>' if state else '<span class="badge-off">OFF</span>'
+        badge = '<span class="on">ON</span>' if state else '<span class="off">OFF</span>'
         timer_html = ''
         if rid in _zone_timers:
             rem = _zone_timers[rid]['off_at'] - int(time.time())
