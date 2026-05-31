@@ -278,10 +278,13 @@ def daily_rain_check_if_due(config):
 CSS = ('<style>'
 '*{box-sizing:border-box;margin:0;padding:0}'
 'body{font-family:Arial,sans-serif;background:#eef7ee;color:#1b4332}'
-'nav{background:#2d6a4f;padding:8px 12px;display:flex;flex-wrap:wrap;gap:4px}'
-'.brand{color:#fff;font-weight:bold;font-size:16px;margin-right:8px;text-decoration:none}'
-'nav a{color:#d8f3dc;text-decoration:none;padding:4px 9px;border-radius:4px;font-size:14px}'
-'nav a:hover{background:rgba(255,255,255,.2)}'
+'nav{background:#2d6a4f;padding:8px 12px;display:flex;flex-wrap:wrap;align-items:center}'
+'.brand{color:#fff;font-weight:bold;font-size:17px;text-decoration:none;margin-right:auto}'
+'.links{display:flex;gap:4px;align-items:center}'
+'.links a{color:#d8f3dc;text-decoration:none;padding:6px 10px;border-radius:4px;font-size:15px}'
+'.links a:hover{background:rgba(255,255,255,.2)}'
+'.nvtoggle{display:none}'
+'.burger{display:none;color:#fff;font-size:26px;cursor:pointer;padding:0 8px;line-height:1}'
 'main{padding:12px;max-width:840px;margin:0 auto}'
 'h1,h2,h3{color:#2d6a4f;margin:8px 0 5px}'
 'h1{font-size:19px}h2{font-size:15px;border-bottom:2px solid #d8f3dc;padding-bottom:2px}'
@@ -300,18 +303,34 @@ CSS = ('<style>'
 'p,li{margin:4px 0;font-size:13px}ul{list-style:none;padding:0}'
 'a{color:#2d6a4f}a:hover{text-decoration:underline}'
 '.msg{background:#d4edda;border:1px solid #c3e6cb;padding:7px;border-radius:5px;font-size:13px;margin-bottom:7px}'
+'.bigbtn{display:block;background:#52b788;color:#fff;text-decoration:none;padding:15px;border-radius:8px;font-size:16px;font-weight:bold;text-align:center;margin-bottom:8px}'
+'.bigbtn:hover{opacity:.9;text-decoration:none}'
+'@media(max-width:600px){'
+'.brand{margin-right:0}'
+'.burger{display:block;margin-left:auto}'
+'.links{display:none;flex-basis:100%;flex-direction:column;gap:0;margin-top:6px}'
+'.nvtoggle:checked~.links{display:flex}'
+'.links a{padding:13px 8px;font-size:17px;border-top:1px solid rgba(255,255,255,.2)}'
+'.grid{grid-template-columns:1fr}'
+'.card h3{font-size:15px}'
+'}'
 '</style>')
 
 META = '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
 _FOOT = '</main></body></html>'
 
 def _nav():
+    # Pure-CSS hamburger: the checkbox toggles .links visibility on mobile.
     return ('<nav>'
             '<a class="brand" href="/">&#127807; Sprinkler</a>'
+            '<input type="checkbox" id="nv" class="nvtoggle">'
+            '<label for="nv" class="burger">&#9776;</label>'
+            '<div class="links">'
+            '<a href="/">&#127968; Home</a>'
             '<a href="/manual">&#9654; Manual</a>'
-            '<a href="/config">&#128198; Schedule</a>'
             '<a href="/settings">&#9881; Settings</a>'
             '<a href="/stats">&#128200; Stats</a>'
+            '</div>'
             '</nav>')
 
 def _head(title):
@@ -340,7 +359,7 @@ def _schedule_block(s, relays):
         day_html += '<label><input type="checkbox" name="day_' + dk + '"' + chk + '> ' + dl + '</label> '
     return (
         '<div class="card">'
-        '<form method="POST" action="/config">'
+        '<form method="POST" action="/settings">'
         '<input type="hidden" name="action" value="update">'
         '<input type="hidden" name="id" value="' + sid + '">'
         '<div class="row">'
@@ -352,7 +371,7 @@ def _schedule_block(s, relays):
         '</div><div class="row">' + day_html + '</div>'
         '<input type="submit" value="Save">'
         '</form> '
-        '<form method="POST" action="/config" style="display:inline">'
+        '<form method="POST" action="/settings" style="display:inline">'
         '<input type="hidden" name="action" value="delete">'
         '<input type="hidden" name="id" value="' + sid + '">'
         '<input type="submit" value="Delete" class="red"></form>'
@@ -364,7 +383,7 @@ def _add_form(relays):
     for dk, dl in [('mon','Mo'),('tue','Tu'),('wed','We'),('thu','Th'),('fri','Fr'),('sat','Sa'),('sun','Su')]:
         day_html += '<label><input type="checkbox" name="day_' + dk + '"> ' + dl + '</label> '
     return (
-        '<div class="card"><form method="POST" action="/config">'
+        '<div class="card"><form method="POST" action="/settings">'
         '<input type="hidden" name="action" value="add">'
         '<div class="row">'
         'Name:<input type="text" name="name" style="width:110px">'
@@ -384,7 +403,7 @@ def _rain_form(rs):
     ld = rs.get('last_check_date', '') or 'never'
     lm = str(rs.get('last_check_mm', 0.0))
     return (
-        '<div class="card"><form method="POST" action="/config">'
+        '<div class="card"><form method="POST" action="/settings">'
         '<input type="hidden" name="action" value="rain_config">'
         '<div class="row"><label><input type="checkbox" name="enabled"' + en + '>'
         ' Skip when rained today</label></div>'
@@ -395,7 +414,7 @@ def _rain_form(rs):
         '</div><small>Last: ' + ld + ' ' + lm + 'mm</small><br>'
         '<input type="submit" value="Save Rain" style="margin-top:6px">'
         '</form>'
-        '<form method="POST" action="/config" style="margin-top:6px">'
+        '<form method="POST" action="/settings" style="margin-top:6px">'
         '<input type="hidden" name="action" value="rain_check_now">'
         '<input type="submit" value="Check Now" class="blu"></form></div>'
     )

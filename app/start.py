@@ -81,7 +81,7 @@ relay2 = Pin(17, Pin.OUT)
 mymotion = motion(14, nonaction, True) # Turning motion detection off.
 timer = machine.Timer(0)  
 timer.init(period=60000, mode=machine.Timer.PERIODIC, callback=CheckSchedule)
-machine.freq(80000000)
+machine.freq(160000000)  # 160 MHz - faster web UI rendering (was 80 MHz)
 
 MyResetCause = machine.reset_cause()
 resetstr = "Unknown - "+str(MyResetCause)
