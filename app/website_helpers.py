@@ -6,6 +6,7 @@ __all__ = [
     'WEEKDAY_STR', 'TELEMETRY_FILE', 'RAIN_HISTORY_FILE',
     # settings
     'load_settings', 'save_settings', 'get_relay_by_id', 'get_current_version',
+    'VALID_PINS', 'read_pin',
     # zone timers (underscore names excluded from import * without __all__)
     '_zone_timers', '_zone_clear_timer', 'manual_on_for',
     # config & rain
@@ -34,13 +35,26 @@ WEEKDAY_STR = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 SETTINGS_FILE = 'device_settings.json'
 _settings_cache = None
 
+# Output-capable GPIOs on the ESP32 (WROOM). 20 / 24 / 28-31 are not bonded out;
+# 34-39 are input-only. Used to validate pins entered on the Settings page.
+VALID_PINS = {0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19,
+              21, 22, 23, 25, 26, 27, 32, 33}
+
+def read_pin(gpio):
+    """Return the relay pin value, or None if the GPIO is not a valid pin.
+    Keeps a bad config from crashing a whole page render."""
+    try:
+        return Pin(gpio, Pin.OUT).value()
+    except (ValueError, TypeError):
+        return None
+
 def default_settings():
     return {
         "version": 1,
         "relays": [
             {"id": 1, "gpio": 17, "name": "Zone 1"},
             {"id": 2, "gpio": 19, "name": "Zone 2"},
-            {"id": 3, "gpio": 20, "name": "Zone 3"},
+            {"id": 3, "gpio": 18, "name": "Zone 3"},
             {"id": 4, "gpio": 21, "name": "Zone 4"},
         ]
     }
@@ -57,6 +71,16 @@ def load_settings():
             save_settings(s)
     except OSError:
         s = default_settings()
+        save_settings(s)
+    # Auto-heal any persisted invalid GPIO (e.g. legacy GPIO 20) back to the
+    # per-zone default so a bad saved pin can't permanently break a zone.
+    defaults = {d['id']: d['gpio'] for d in default_settings()['relays']}
+    healed = False
+    for r in s['relays']:
+        if r.get('gpio') not in VALID_PINS:
+            r['gpio'] = defaults.get(r['id'], 17)
+            healed = True
+    if healed:
         save_settings(s)
     _settings_cache = s
     return s

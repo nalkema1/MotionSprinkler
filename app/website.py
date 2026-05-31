@@ -6,6 +6,7 @@ from app.website_helpers import (
     myTime, sendTelemetry, gc, os,
     WEEKDAY_STR, TELEMETRY_FILE, RAIN_HISTORY_FILE,
     load_settings, save_settings, get_relay_by_id, get_current_version,
+    VALID_PINS, read_pin,
     _zone_timers, _zone_clear_timer, manual_on_for,
     load_config, save_config, activate_sprinkler,
     do_rain_check, should_skip_for_rain, daily_rain_check_if_due,
@@ -74,8 +75,13 @@ def index(req, resp):
         gpio = r['gpio']
         rid = r['id']
         name = r.get('name', 'Zone {}'.format(rid))
-        state = Pin(gpio, Pin.OUT).value()
-        badge = '<span class="on">ON</span>' if state else '<span class="off">OFF</span>'
+        state = read_pin(gpio)
+        if state is None:
+            badge = '<span class="off">BAD PIN</span>'
+        elif state:
+            badge = '<span class="on">ON</span>'
+        else:
+            badge = '<span class="off">OFF</span>'
         timer_html = ''
         if rid in _zone_timers:
             rem = _zone_timers[rid]['off_at'] - int(time.time())
@@ -136,8 +142,13 @@ def manual(req, resp):
         gpio = r['gpio']
         rid = r['id']
         name = r.get('name', 'Zone {}'.format(rid))
-        state = Pin(gpio, Pin.OUT).value()
-        badge = '<span class="on">ON</span>' if state else '<span class="off">OFF</span>'
+        state = read_pin(gpio)
+        if state is None:
+            badge = '<span class="off">BAD PIN</span>'
+        elif state:
+            badge = '<span class="on">ON</span>'
+        else:
+            badge = '<span class="off">OFF</span>'
         timer_html = ''
         if rid in _zone_timers:
             rem = _zone_timers[rid]['off_at'] - int(time.time())
@@ -260,6 +271,7 @@ def settings_page(req, resp):
     if req.method == "POST":
         yield from req.read_form_data()
         updated = []
+        rejected = []
         for r in s['relays']:
             rid = r['id']
             rids = str(rid)
@@ -268,10 +280,16 @@ def settings_page(req, resp):
                 gpio = int(req.form.get('gpio_' + rids, str(r['gpio'])) or r['gpio'])
             except Exception:
                 gpio = r['gpio']
+            if gpio not in VALID_PINS:
+                rejected.append("Zone {} GPIO {} (kept {})".format(rid, gpio, r['gpio']))
+                gpio = r['gpio']
             updated.append({"id": rid, "gpio": gpio, "name": name})
         s['relays'] = updated
         save_settings(s)
-        message = "Settings saved."
+        if rejected:
+            message = "Saved. Invalid pins rejected: " + ", ".join(rejected)
+        else:
+            message = "Settings saved."
     yield from picoweb.start_response(resp)
     yield from resp.awrite(_head("Settings"))
     yield from resp.awrite('<h1>&#9881; Settings</h1>')
