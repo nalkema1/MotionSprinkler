@@ -83,8 +83,9 @@ def index(req, resp):
         else:
             badge = '<span class="off">OFF</span>'
         timer_html = ''
-        if rid in _zone_timers:
-            rem = _zone_timers[rid]['off_at'] - int(time.time())
+        info = _zone_timers.get(rid)
+        if info:
+            rem = info['off_at'] - int(time.time())
             if rem > 0:
                 timer_html = '<br><small>Off in {}m{}s</small>'.format(rem // 60, rem % 60)
         yield from resp.awrite(
@@ -149,8 +150,9 @@ def manual(req, resp):
         else:
             badge = '<span class="off">OFF</span>'
         timer_html = ''
-        if rid in _zone_timers:
-            rem = _zone_timers[rid]['off_at'] - int(time.time())
+        info = _zone_timers.get(rid)
+        if info:
+            rem = info['off_at'] - int(time.time())
             if rem > 0:
                 timer_html = '<p><small>Off in {}m{}s</small></p>'.format(rem // 60, rem % 60)
         rid_s = str(rid)
@@ -361,8 +363,9 @@ def api_sprinkler(req, resp):
             return
     state = "on" if relay_pin.value() == 1 else "off"
     result = {"state": state, "zone": zone_id, "gpio": gpio}
-    if zone_id in _zone_timers:
-        rem = _zone_timers[zone_id]['off_at'] - int(time.time())
+    info = _zone_timers.get(zone_id)
+    if info:
+        rem = info['off_at'] - int(time.time())
         if rem > 0:
             result["auto_off_in_seconds"] = rem
     yield from picoweb.start_response(resp, content_type="application/json")
