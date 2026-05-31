@@ -27,7 +27,7 @@ start_time = time.ticks_ms()
 power_on = time.ticks_ms()
 data = {}
 
-def ConnectToNetwork(reset_action):
+def ConnectToNetwork(reset_action=''):
 
     global wm
 
