@@ -3,6 +3,8 @@ webrepl_cfg.py
 keys.py
 *.ipynb
 photos/
+*copy*
+* copy.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
