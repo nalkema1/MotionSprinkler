@@ -104,35 +104,45 @@ def get_current_version():
     except Exception:
         return 'unknown'
 
-# ── Per-zone timer state ──────────────────────────────────────────────────────
-_zone_timers = {}
+# ── Per-zone timed-off state ──────────────────────────────────────────────────
+# A SINGLE periodic timer polls every active zone and switches off any whose
+# off_at has passed. The previous design created one machine.Timer per zone,
+# but on the ESP32 port those instances are not independent - they share the
+# same underlying timer, so only one zone's auto-off would ever fire and the
+# others stayed on. One shared poll timer is deterministic and fixes that.
+_zone_timers = {}   # {relay_id: {"gpio": gpio, "off_at": epoch_seconds}}
+_tick_timer = None
+
+def _zone_tick(t):
+    now = int(time.time())
+    for rid in list(_zone_timers.keys()):
+        info = _zone_timers.get(rid)
+        if info and now >= info["off_at"]:
+            try:
+                Pin(info["gpio"], Pin.OUT).value(0)
+                sendTelemetry("Zone {} auto-off".format(rid))
+            except Exception:
+                pass
+            _zone_timers.pop(rid, None)
+
+def _start_tick():
+    # Lazily start the 1 Hz poll timer the first time a zone is timed on.
+    # Left running afterwards (polling an empty dict costs nothing); a fresh
+    # hardware timer id (3) avoids colliding with Timer(0)/Timer(-1) elsewhere.
+    global _tick_timer
+    if _tick_timer is None:
+        _tick_timer = Timer(3)
+        _tick_timer.init(period=1000, mode=Timer.PERIODIC, callback=_zone_tick)
 
 def _zone_clear_timer(relay_id):
-    if relay_id in _zone_timers:
-        try:
-            _zone_timers[relay_id]["timer"].deinit()
-        except Exception:
-            pass
-        del _zone_timers[relay_id]
-
-def _make_off_cb(relay_id, gpio):
-    def cb(t):
-        try:
-            Pin(gpio, Pin.OUT).value(0)
-            sendTelemetry("Zone {} auto-off".format(relay_id))
-        except Exception:
-            pass
-        _zone_timers.pop(relay_id, None)
-    return cb
+    # Cancel a zone's pending auto-off (manual ON/OFF overrides any timer).
+    _zone_timers.pop(relay_id, None)
 
 def manual_on_for(minutes, gpio, relay_id):
-    _zone_clear_timer(relay_id)
     Pin(gpio, Pin.OUT).value(1)
-    period_ms = int(minutes * 60 * 1000)
-    off_at = int(time.time()) + int(minutes * 60)
-    t = Timer(-1)
-    t.init(period=period_ms, mode=Timer.ONE_SHOT, callback=_make_off_cb(relay_id, gpio))
-    _zone_timers[relay_id] = {"timer": t, "off_at": off_at}
+    off_at = int(time.time()) + int(round(minutes * 60))
+    _zone_timers[relay_id] = {"gpio": gpio, "off_at": off_at}
+    _start_tick()
     sendTelemetry("Zone {} ON {}min gpio{}".format(relay_id, minutes, gpio))
 
 # ── Config helpers ────────────────────────────────────────────────────────────
