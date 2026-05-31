@@ -50,6 +50,7 @@ FOR %%F IN (
     app\start.py
     app\telemetry.py
     app\timesync.py
+    app\website_helpers.py
     app\website.py
     app\wifi_manager.py
 ) DO (
