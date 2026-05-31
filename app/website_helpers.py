@@ -1,3 +1,22 @@
+__all__ = [
+    # stdlib re-exports needed by website.py routes
+    'ujson', 'utime', 'Pin', 'Timer', 'reset', 'time',
+    'myTime', 'sendTelemetry', 'gc', 'os',
+    # constants
+    'WEEKDAY_STR', 'TELEMETRY_FILE', 'RAIN_HISTORY_FILE',
+    # settings
+    'load_settings', 'save_settings', 'get_relay_by_id', 'get_current_version',
+    # zone timers (underscore names excluded from import * without __all__)
+    '_zone_timers', '_zone_clear_timer', 'manual_on_for',
+    # config & rain
+    'load_config', 'save_config', 'activate_sprinkler',
+    'do_rain_check', 'should_skip_for_rain', 'daily_rain_check_if_due',
+    # page chrome
+    '_head', '_FOOT',
+    # HTML rendering helpers
+    '_rain_form', '_rain_history', '_schedule_block', '_add_form',
+]
+
 import ujson
 import utime
 from machine import Pin, Timer, reset
