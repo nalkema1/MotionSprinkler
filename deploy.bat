@@ -9,9 +9,18 @@ REM
 REM Set PORT below to match your current COM port.
 REM ─────────────────────────────────────────────────────────────────────────────
 
-SET PORT=COM14
+SET PORT=COM8
 SET BAUD=115200
 SET AMPY=ampy --port %PORT% --baud %BAUD%
+
+REM ── Ensure ampy is installed ──────────────────────────────────────────────────
+ampy --version >NUL 2>&1
+IF ERRORLEVEL 1 (
+    ECHO ampy not found - installing adafruit-ampy via pip ...
+    pip install adafruit-ampy
+    IF ERRORLEVEL 1 ( ECHO ERROR: pip install failed. Run: pip install adafruit-ampy & EXIT /B 1 )
+    ECHO.
+)
 
 ECHO.
 ECHO MotionSprinkler deploy  ^|  port=%PORT%
