@@ -1,5 +1,17 @@
 import picoweb
-from app.website_helpers import *
+# Explicit imports - MicroPython v1.18 does not honor __all__ for `import *`,
+# and `import *` silently skips underscore-prefixed names regardless.
+from app.website_helpers import (
+    ujson, utime, Pin, Timer, reset, time,
+    myTime, sendTelemetry, gc, os,
+    WEEKDAY_STR, TELEMETRY_FILE, RAIN_HISTORY_FILE,
+    load_settings, save_settings, get_relay_by_id, get_current_version,
+    _zone_timers, _zone_clear_timer, manual_on_for,
+    load_config, save_config, activate_sprinkler,
+    do_rain_check, should_skip_for_rain, daily_rain_check_if_due,
+    _head, _FOOT,
+    _rain_form, _rain_history, _schedule_block, _add_form,
+)
 
 app = picoweb.WebApp(__name__)
 
