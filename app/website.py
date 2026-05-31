@@ -94,7 +94,8 @@ def index(req, resp):
         )
     yield from resp.awrite('</div>'
                            '<a class="bigbtn" href="/manual">&#9654; Manual Control</a>'
-                           '<a class="bigbtn" href="/settings">&#128198; Schedules &amp; Settings</a>'
+                           '<a class="bigbtn" href="/schedule">&#128198; Schedules</a>'
+                           '<a class="bigbtn" href="/settings">&#9881; Settings</a>'
                            '<a class="bigbtn" href="/stats">&#128200; System Stats</a>'
                            '<a class="bigbtn" href="/telemetry">&#128203; Telemetry Log</a>'
                            + _FOOT)
@@ -175,11 +176,10 @@ def manual(req, resp):
         )
     yield from resp.awrite('</div>' + _FOOT)
 
-@app.route("/settings", methods=['GET', 'POST'])
-def settings_page(req, resp):
+@app.route("/schedule", methods=['GET', 'POST'])
+def schedule_page(req, resp):
     cfg = load_config()
-    s = load_settings()
-    relays = s['relays']
+    relays = load_settings()['relays']
     message = ""
     if req.method == "POST":
         yield from req.read_form_data()
@@ -187,7 +187,7 @@ def settings_page(req, resp):
         if action == 'add':
             new_id = 1
             if cfg['schedules']:
-                new_id = max(s.get('id', 0) for s in cfg['schedules']) + 1
+                new_id = max(x.get('id', 0) for x in cfg['schedules']) + 1
             days = [d for d in WEEKDAY_STR if req.form.get('day_' + d)]
             try:
                 duration = int(req.form.get('duration', '15') or 15)
@@ -204,11 +204,13 @@ def settings_page(req, resp):
                 'duration': duration, 'days': days, 'enabled': True, 'zone': zone,
             })
             save_config(cfg)
+            message = "Schedule added."
         elif action == 'delete':
             try:
                 del_id = int(req.form.get('id', '0'))
-                cfg['schedules'] = [s for s in cfg['schedules'] if s.get('id') != del_id]
+                cfg['schedules'] = [x for x in cfg['schedules'] if x.get('id') != del_id]
                 save_config(cfg)
+                message = "Schedule deleted."
             except Exception:
                 pass
         elif action == 'update':
@@ -230,6 +232,7 @@ def settings_page(req, resp):
                             pass
                         break
                 save_config(cfg)
+                message = "Schedule saved."
             except Exception:
                 pass
         elif action == 'rain_check_now':
@@ -250,38 +253,64 @@ def settings_page(req, resp):
             rs['last_check_mm'] = 0.0
             cfg['rain_skip'] = rs
             save_config(cfg)
-        else:
-            # No 'action' field -> the zone GPIO form was submitted
-            updated = []
-            rejected = []
-            for r in s['relays']:
-                rid = r['id']
-                rids = str(rid)
-                name = req.form.get('name_' + rids, r.get('name', 'Zone ' + rids)) or 'Zone ' + rids
-                try:
-                    gpio = int(req.form.get('gpio_' + rids, str(r['gpio'])) or r['gpio'])
-                except Exception:
-                    gpio = r['gpio']
-                if gpio not in VALID_PINS:
-                    rejected.append("Zone {} GPIO {} (kept {})".format(rid, gpio, r['gpio']))
-                    gpio = r['gpio']
-                updated.append({"id": rid, "gpio": gpio, "name": name})
-            s['relays'] = updated
-            save_settings(s)
-            message = "Saved. Invalid pins rejected: " + ", ".join(rejected) if rejected else "Settings saved."
+            message = "Rain settings saved."
         cfg = load_config()
-        s = load_settings()
-        relays = s['relays']
 
-    # ── Render (batched into a few writes to keep the page fast) ──────────────
+    yield from picoweb.start_response(resp)
+    yield from resp.awrite(_head("Schedule"))
+    head = '<h1>&#128198; Schedule</h1>'
+    if message:
+        head += '<div class="msg">' + message + '</div>'
+    head += ('<p><small>Each entry runs one zone at one time. To water a zone at '
+             'several times, add a schedule for each time. Schedules are grouped by zone below.</small></p>')
+    yield from resp.awrite(head)
+
+    # Schedules first (what the user comes here for), grouped by zone then time.
+    scheds = sorted(cfg.get('schedules', []), key=lambda x: (x.get('zone', 1), x.get('time', '')))
+    blocks = ''
+    for sc in scheds:
+        blocks += _schedule_block(sc, relays)
+    if not blocks:
+        blocks = '<p><em>No schedules yet. Add one below.</em></p>'
+    yield from resp.awrite('<h2>Schedules</h2>' + blocks)
+    yield from resp.awrite('<h2>Add Schedule</h2>' + _add_form(relays))
+
+    yield from resp.awrite('<h2>Rain Skip</h2>' + _rain_form(cfg.get('rain_skip') or {}))
+    yield from resp.awrite('<h2>Rain History (14 days)</h2>' + _rain_history())
+    yield from resp.awrite(_FOOT)
+
+@app.route("/settings", methods=['GET', 'POST'])
+def settings_page(req, resp):
+    s = load_settings()
+    message = ""
+    if req.method == "POST":
+        yield from req.read_form_data()
+        updated = []
+        rejected = []
+        for r in s['relays']:
+            rid = r['id']
+            rids = str(rid)
+            name = req.form.get('name_' + rids, r.get('name', 'Zone ' + rids)) or 'Zone ' + rids
+            try:
+                gpio = int(req.form.get('gpio_' + rids, str(r['gpio'])) or r['gpio'])
+            except Exception:
+                gpio = r['gpio']
+            if gpio not in VALID_PINS:
+                rejected.append("Zone {} GPIO {} (kept {})".format(rid, gpio, r['gpio']))
+                gpio = r['gpio']
+            updated.append({"id": rid, "gpio": gpio, "name": name})
+        s['relays'] = updated
+        save_settings(s)
+        message = "Saved. Invalid pins rejected: " + ", ".join(rejected) if rejected else "Settings saved."
+        s = load_settings()
+
     yield from picoweb.start_response(resp)
     yield from resp.awrite(_head("Settings"))
-
     head = '<h1>&#9881; Settings</h1>'
     if message:
         head += '<div class="msg">' + message + '</div>'
     zone_rows = ''
-    for r in relays:
+    for r in s['relays']:
         rids = str(r['id'])
         zone_rows += ('<tr><td>Zone ' + rids + '</td>'
                       '<td><input type="text" name="name_' + rids + '" value="' + r.get('name', 'Zone ' + rids) + '" style="width:120px"></td>'
@@ -290,19 +319,8 @@ def settings_page(req, resp):
              '<form method="POST" action="/settings">'
              '<table><tr><th>Zone</th><th>Name</th><th>GPIO</th></tr>' + zone_rows +
              '</table><br><input type="submit" value="Save Zones"></form></div>')
+    head += ('<p><small>Set schedules on the <a href="/schedule">Schedule</a> page.</small></p>')
     yield from resp.awrite(head)
-
-    yield from resp.awrite('<h2>Rain Skip</h2>' + _rain_form(cfg.get('rain_skip') or {}))
-    yield from resp.awrite('<h2>Rain History (14 days)</h2>' + _rain_history())
-
-    sched_html = '<h2>Schedules</h2>'
-    blocks = ''
-    for sc in cfg.get('schedules', []):
-        blocks += _schedule_block(sc, relays)
-    if not blocks:
-        blocks = '<p><em>No schedules yet.</em></p>'
-    yield from resp.awrite(sched_html + blocks)
-    yield from resp.awrite('<h2>Add Schedule</h2>' + _add_form(relays))
 
     yield from resp.awrite('<div class="card"><h2>Data</h2><ul>'
                            '<li><a href="/config.json">&#8681; sprinkler_config.json</a></li>'

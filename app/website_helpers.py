@@ -338,6 +338,7 @@ def _nav():
             '<div class="links">'
             '<a href="/">&#127968; Home</a>'
             '<a href="/manual">&#9654; Manual</a>'
+            '<a href="/schedule">&#128198; Schedule</a>'
             '<a href="/settings">&#9881; Settings</a>'
             '<a href="/stats">&#128200; Stats</a>'
             '</div>'
@@ -369,7 +370,7 @@ def _schedule_block(s, relays):
         day_html += '<label><input type="checkbox" name="day_' + dk + '"' + chk + '> ' + dl + '</label> '
     return (
         '<div class="card">'
-        '<form method="POST" action="/settings">'
+        '<form method="POST" action="/schedule">'
         '<input type="hidden" name="action" value="update">'
         '<input type="hidden" name="id" value="' + sid + '">'
         '<div class="row">'
@@ -381,7 +382,7 @@ def _schedule_block(s, relays):
         '</div><div class="row">' + day_html + '</div>'
         '<input type="submit" value="Save">'
         '</form> '
-        '<form method="POST" action="/settings" style="display:inline">'
+        '<form method="POST" action="/schedule" style="display:inline">'
         '<input type="hidden" name="action" value="delete">'
         '<input type="hidden" name="id" value="' + sid + '">'
         '<input type="submit" value="Delete" class="red"></form>'
@@ -393,7 +394,7 @@ def _add_form(relays):
     for dk, dl in [('mon','Mo'),('tue','Tu'),('wed','We'),('thu','Th'),('fri','Fr'),('sat','Sa'),('sun','Su')]:
         day_html += '<label><input type="checkbox" name="day_' + dk + '"> ' + dl + '</label> '
     return (
-        '<div class="card"><form method="POST" action="/settings">'
+        '<div class="card"><form method="POST" action="/schedule">'
         '<input type="hidden" name="action" value="add">'
         '<div class="row">'
         'Name:<input type="text" name="name" style="width:110px">'
@@ -413,7 +414,7 @@ def _rain_form(rs):
     ld = rs.get('last_check_date', '') or 'never'
     lm = str(rs.get('last_check_mm', 0.0))
     return (
-        '<div class="card"><form method="POST" action="/settings">'
+        '<div class="card"><form method="POST" action="/schedule">'
         '<input type="hidden" name="action" value="rain_config">'
         '<div class="row"><label><input type="checkbox" name="enabled"' + en + '>'
         ' Skip when rained today</label></div>'
@@ -424,7 +425,7 @@ def _rain_form(rs):
         '</div><small>Last: ' + ld + ' ' + lm + 'mm</small><br>'
         '<input type="submit" value="Save Rain" style="margin-top:6px">'
         '</form>'
-        '<form method="POST" action="/settings" style="margin-top:6px">'
+        '<form method="POST" action="/schedule" style="margin-top:6px">'
         '<input type="hidden" name="action" value="rain_check_now">'
         '<input type="submit" value="Check Now" class="blu"></form></div>'
     )
