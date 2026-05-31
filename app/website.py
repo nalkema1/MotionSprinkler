@@ -265,11 +265,25 @@ def schedule_page(req, resp):
              'several times, add a schedule for each time. Schedules are grouped by zone below.</small></p>')
     yield from resp.awrite(head)
 
-    # Schedules first (what the user comes here for), grouped by zone then time.
-    scheds = sorted(cfg.get('schedules', []), key=lambda x: (x.get('zone', 1), x.get('time', '')))
+    # Schedules grouped by zone. Manual grouping (plain loops) avoids
+    # sorted(key=...), which is unreliable on this MicroPython build. Each
+    # block is rendered defensively so one bad entry can't blank the page.
+    scheds = cfg.get('schedules', [])
+    known = [r['id'] for r in relays]
     blocks = ''
+    for r in relays:
+        for sc in scheds:
+            if sc.get('zone', 1) == r['id']:
+                try:
+                    blocks += _schedule_block(sc, relays)
+                except Exception:
+                    pass
     for sc in scheds:
-        blocks += _schedule_block(sc, relays)
+        if sc.get('zone', 1) not in known:
+            try:
+                blocks += _schedule_block(sc, relays)
+            except Exception:
+                pass
     if not blocks:
         blocks = '<p><em>No schedules yet. Add one below.</em></p>'
     yield from resp.awrite('<h2>Schedules</h2>' + blocks)
