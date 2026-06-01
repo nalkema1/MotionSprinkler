@@ -10,7 +10,7 @@ from app.website_helpers import (
     _zone_timers, _zone_clear_timer, manual_on_for,
     load_config, save_config, activate_sprinkler,
     do_rain_check, should_skip_for_rain, daily_rain_check_if_due,
-    _head, _FOOT,
+    _head, _emit_head, _FOOT,
     _rain_form, _rain_history, _schedule_block, _add_form,
 )
 
@@ -114,7 +114,7 @@ _sched_timer.init(period=30000, mode=Timer.PERIODIC, callback=schedule_checker)
 def index(req, resp):
     relays = load_settings()['relays']
     yield from _sr(resp)
-    yield from resp.awrite(_head("Dashboard"))
+    yield from _emit_head(resp, "Dashboard")
     yield from resp.awrite('<h1>&#127807; Dashboard</h1><div class="grid">')
     for r in relays:
         gpio = r['gpio']
@@ -183,7 +183,7 @@ def manual(req, resp):
                 manual_on_for(minutes, gpio, zone_id)
                 message = "{} ON for {}min.".format(zname, minutes)
     yield from _sr(resp)
-    yield from resp.awrite(_head("Manual"))
+    yield from _emit_head(resp, "Manual")
     yield from resp.awrite('<h1>&#9654; Manual Control</h1>')
     if message:
         yield from resp.awrite('<div class="msg">' + message + '</div>')
@@ -313,7 +313,7 @@ def schedule_page(req, resp):
         return
 
     yield from _sr(resp)
-    yield from resp.awrite(_head("Schedule"))
+    yield from _emit_head(resp, "Schedule")
     head = '<h1>&#128198; Schedule</h1>'
     if message:
         head += '<div class="msg">' + message + '</div>'
@@ -375,7 +375,7 @@ def settings_page(req, resp):
         s = load_settings()
 
     yield from _sr(resp)
-    yield from resp.awrite(_head("Settings"))
+    yield from _emit_head(resp, "Settings")
     head = '<h1>&#9881; Settings</h1>'
     if message:
         head += '<div class="msg">' + message + '</div>'
@@ -472,7 +472,7 @@ def stats(req, resp):
     reboot_str = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(t[2], t[1], t[0], t[3], t[4])
     fs = os.statvfs('/')
     ver = get_current_version()
-    yield from resp.awrite(_head("Stats"))
+    yield from _emit_head(resp, "Stats")
     yield from resp.awrite('<h1>&#128200; Stats</h1><div class="card"><table>')
     yield from resp.awrite('<tr><th>Firmware</th><td>' + ver + '</td></tr>')
     yield from resp.awrite('<tr><th>Free RAM</th><td>' + str(mem_free) + ' bytes</td></tr>')
@@ -489,7 +489,7 @@ def stats(req, resp):
 def restart(req, resp):
     yield from _sr(resp)
     sendTelemetry("Restart initiated.")
-    yield from resp.awrite(_head("Restarting"))
+    yield from _emit_head(resp, "Restarting")
     yield from resp.awrite('<h1>Restarting...</h1>' + _FOOT)
     time.sleep(1)
     reset()
@@ -516,7 +516,7 @@ def telemetry(req, resp):
         fstat = os.stat(TELEMETRY_FILE)
         lm = time.localtime(fstat[8])
         lm_str = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(lm[2], lm[1], lm[0], lm[3], lm[4])
-        yield from resp.awrite(_head("Telemetry"))
+        yield from _emit_head(resp, "Telemetry")
         yield from resp.awrite('<h1>&#128203; Telemetry</h1><div class="card">')
         yield from resp.awrite('<p><small>Updated ' + lm_str + ' &mdash; ' + str(fstat[6]) + ' bytes</small></p>'
                                '<p><a href="/telemetry" class="bigbtn" style="display:inline-block;padding:8px 14px">&#8635; Refresh</a> '
@@ -536,7 +536,7 @@ def telemetry(req, resp):
                                '<p><small>Showing the most recent entries. '
                                'Use Download CSV for the full log.</small></p>' + _FOOT)
     except OSError:
-        yield from resp.awrite(_head("Telemetry"))
+        yield from _emit_head(resp, "Telemetry")
         yield from resp.awrite('<h1>No telemetry file.</h1>' + _FOOT)
 
 @app.route("/telemetry.csv")
@@ -554,11 +554,11 @@ def clear_telemetry(req, resp):
         os.remove(TELEMETRY_FILE)
         sendTelemetry("Telemetry cleared.")
         yield from _sr(resp)
-        yield from resp.awrite(_head("Cleared"))
+        yield from _emit_head(resp, "Cleared")
         yield from resp.awrite('<h1>Telemetry cleared.</h1><p><a href="/">Home</a></p>' + _FOOT)
     except OSError:
         yield from _sr(resp)
-        yield from resp.awrite(_head("Error"))
+        yield from _emit_head(resp, "Error")
         yield from resp.awrite('<h1>Failed to clear telemetry.</h1><p><a href="/">Home</a></p>' + _FOOT)
 
 @app.route("/favicon.ico")
@@ -570,7 +570,7 @@ def favicon(req, resp):
 @app.route("/help")
 def help_page(req, resp):
     yield from _sr(resp)
-    yield from resp.awrite(_head("Help"))
+    yield from _emit_head(resp, "Help")
     yield from resp.awrite('<h1>&#10067; Help</h1>')
     yield from resp.awrite(
         '<div class="card"><h2>Menu</h2><ul>'
@@ -628,4 +628,4 @@ except Exception as e:
     sendTelemetry("Watchdog init failed: {}".format(e))
 
 sendTelemetry("Webserver started")
-app.run(debug=True, host="0.0.0.0", port=80)
+app.run(debug=False, host="0.0.0.0", port=80)

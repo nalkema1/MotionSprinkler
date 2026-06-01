@@ -13,7 +13,7 @@ __all__ = [
     'load_config', 'save_config', 'activate_sprinkler',
     'do_rain_check', 'should_skip_for_rain', 'daily_rain_check_if_due',
     # page chrome
-    '_head', '_FOOT',
+    '_head', '_emit_head', '_FOOT',
     # HTML rendering helpers
     '_rain_form', '_rain_history', '_schedule_block', '_add_form',
 ]
@@ -313,6 +313,8 @@ def do_rain_check(config, force=False):
         r = _http_get(url)
         data = r.json()
         r.close()
+        r = None
+        gc.collect()  # free the (large) TLS buffers from the HTTPS request
         mm = float(data['daily']['precipitation_sum'][0] or 0.0)
         rs['last_check_date'] = today
         rs['last_check_mm'] = mm
@@ -438,6 +440,21 @@ def _head(title=''):
     gc.collect()  # defragment heap before a render; reduces intermittent blank pages
     return ('<html><head>' + META + '<title>' + title + '</title>' + CSS +
             '</head><body>' + _nav(title) + '<main>')
+
+def _emit_head(resp, title=''):
+    # Stream the page head in small pieces instead of returning one big ~2.5KB
+    # concatenated string. On a near-full heap that single allocation could
+    # fail with MemoryError AFTER the response headers were already sent,
+    # producing a 200 with an empty body (a blank page). Small writes keep the
+    # peak allocation low.
+    gc.collect()
+    yield from resp.awrite('<html><head>')
+    yield from resp.awrite(META)
+    yield from resp.awrite('<title>' + title + '</title>')
+    yield from resp.awrite(CSS)
+    yield from resp.awrite('</head><body>')
+    yield from resp.awrite(_nav(title))
+    yield from resp.awrite('<main>')
 
 # ── HTML rendering helpers ────────────────────────────────────────────────────
 
