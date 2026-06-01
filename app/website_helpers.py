@@ -293,10 +293,12 @@ CSS = ('<style>'
 '*{box-sizing:border-box;margin:0;padding:0}'
 'body{font-family:Arial,sans-serif;background:#eef7ee;color:#1b4332}'
 'nav{background:#2d6a4f;padding:8px 12px;display:flex;flex-wrap:wrap;align-items:center}'
-'.brand{color:#fff;font-weight:bold;font-size:17px;text-decoration:none;margin-right:auto}'
-'.links{display:flex;gap:4px;align-items:center}'
-'.links a{color:#d8f3dc;text-decoration:none;padding:6px 10px;border-radius:4px;font-size:15px}'
-'.links a:hover{background:rgba(255,255,255,.2)}'
+'.brand{color:#fff;font-weight:bold;font-size:18px;text-decoration:none;margin-right:22px;letter-spacing:.3px}'
+'.links{display:flex;gap:3px;align-items:center}'
+'.links a{color:#d8f3dc;text-decoration:none;padding:6px 11px;border-radius:5px;font-size:15px}'
+'.links a:hover{background:rgba(255,255,255,.18)}'
+'.links a.active{background:#fff;color:#2d6a4f;font-weight:bold}'
+'.mobile-only{display:none}'
 '.nvtoggle{display:none}'
 '.burger{display:none;color:#fff;font-size:26px;cursor:pointer;padding:0 8px;line-height:1}'
 'main{padding:12px;max-width:840px;margin:0 auto}'
@@ -321,6 +323,7 @@ CSS = ('<style>'
 '.bigbtn:hover{opacity:.9;text-decoration:none}'
 '@media(max-width:600px){'
 '.brand{margin-right:0}'
+'.mobile-only{display:block}'
 '.burger{display:block;margin-left:auto}'
 '.links{display:none;flex-basis:100%;flex-direction:column;gap:0;margin-top:6px}'
 '.nvtoggle:checked~.links{display:flex}'
@@ -333,23 +336,36 @@ CSS = ('<style>'
 META = '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
 _FOOT = '</main></body></html>'
 
-def _nav():
-    # Pure-CSS hamburger: the checkbox toggles .links visibility on mobile.
+_NAV_ITEMS = [
+    ('/manual', '&#9654; Manual'),
+    ('/schedule', '&#128198; Schedule'),
+    ('/settings', '&#9881; Settings'),
+    ('/stats', '&#128200; Stats'),
+    ('/telemetry', '&#128203; Telemetry'),
+    ('/help', '&#10067; Help'),
+]
+# Map page title -> nav href so the current page's link is highlighted.
+_TITLE_HREF = {'Manual': '/manual', 'Schedule': '/schedule', 'Settings': '/settings',
+               'Stats': '/stats', 'Telemetry': '/telemetry', 'Help': '/help'}
+
+def _nav(title=''):
+    # The brand on the left is the Home link. Pure-CSS hamburger on mobile.
+    active = _TITLE_HREF.get(title, '')
+    links = ''
+    for href, label in _NAV_ITEMS:
+        cls = ' class="active"' if href == active else ''
+        links += '<a href="' + href + '"' + cls + '>' + label + '</a>'
     return ('<nav>'
-            '<a class="brand" href="/">&#127807; Sprinkler</a>'
+            '<a class="brand" href="/">Garden Sprinkler</a>'
             '<input type="checkbox" id="nv" class="nvtoggle">'
             '<label for="nv" class="burger">&#9776;</label>'
-            '<div class="links">'
-            '<a href="/">&#127968; Home</a>'
-            '<a href="/manual">&#9654; Manual</a>'
-            '<a href="/schedule">&#128198; Schedule</a>'
-            '<a href="/settings">&#9881; Settings</a>'
-            '<a href="/stats">&#128200; Stats</a>'
-            '</div>'
+            '<div class="links">' + links + '</div>'
             '</nav>')
 
-def _head(title):
-    return '<html><head>' + META + '<title>' + title + '</title>' + CSS + '</head><body>' + _nav() + '<main>'
+def _head(title=''):
+    gc.collect()  # defragment heap before a render; reduces intermittent blank pages
+    return ('<html><head>' + META + '<title>' + title + '</title>' + CSS +
+            '</head><body>' + _nav(title) + '<main>')
 
 # ── HTML rendering helpers ────────────────────────────────────────────────────
 

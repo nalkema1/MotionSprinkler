@@ -115,12 +115,16 @@ def index(req, resp):
             '<div class="card"><h3>' + name + '</h3>' + badge + timer_html +
             '<br><small>GPIO ' + str(gpio) + '</small></div>'
         )
+    # Big buttons are for phones only; wide screens use the top menu.
     yield from resp.awrite('</div>'
+                           '<div class="mobile-only">'
                            '<a class="bigbtn" href="/manual">&#9654; Manual Control</a>'
                            '<a class="bigbtn" href="/schedule">&#128198; Schedules</a>'
                            '<a class="bigbtn" href="/settings">&#9881; Settings</a>'
                            '<a class="bigbtn" href="/stats">&#128200; System Stats</a>'
                            '<a class="bigbtn" href="/telemetry">&#128203; Telemetry Log</a>'
+                           '<a class="bigbtn" href="/help">&#10067; Help</a>'
+                           '</div>'
                            + _FOOT)
 
 @app.route("/manual", methods=['GET', 'POST'])
@@ -492,8 +496,9 @@ def telemetry(req, resp):
         lm_str = "{:02d}/{:02d}/{:04d} {:02d}:{:02d}".format(lm[2], lm[1], lm[0], lm[3], lm[4])
         yield from resp.awrite(_head("Telemetry"))
         yield from resp.awrite('<h1>&#128203; Telemetry</h1><div class="card">')
-        yield from resp.awrite('<p>' + lm_str + ' &mdash; ' + str(fstat[6]) + ' bytes &mdash; '
-                               '<a href="/telemetry.csv">Download</a></p>')
+        yield from resp.awrite('<p><small>Updated ' + lm_str + ' &mdash; ' + str(fstat[6]) + ' bytes</small></p>'
+                               '<p><a href="/telemetry" class="bigbtn" style="display:inline-block;padding:8px 14px">&#8635; Refresh</a> '
+                               '<a href="/telemetry.csv" class="bigbtn blu" style="display:inline-block;padding:8px 14px;background:#2471a3">&#8681; Download CSV</a></p>')
         yield from resp.awrite('<table><tr><th>Date</th><th>Message</th></tr>')
         with open(TELEMETRY_FILE, 'r') as f:
             lines = f.readlines()
@@ -527,6 +532,51 @@ def clear_telemetry(req, resp):
         yield from picoweb.start_response(resp)
         yield from resp.awrite(_head("Error"))
         yield from resp.awrite('<h1>Failed to clear telemetry.</h1><p><a href="/">Home</a></p>' + _FOOT)
+
+@app.route("/favicon.ico")
+def favicon(req, resp):
+    # Answer the browser's favicon request cheaply so it doesn't open a second
+    # competing connection (picoweb serves one request at a time).
+    yield from picoweb.start_response(resp, status="204", headers={"Content-Length": "0"})
+
+@app.route("/help")
+def help_page(req, resp):
+    yield from picoweb.start_response(resp)
+    yield from resp.awrite(_head("Help"))
+    yield from resp.awrite('<h1>&#10067; Help</h1>')
+    yield from resp.awrite(
+        '<div class="card"><h2>Menu</h2><ul>'
+        '<li><b>Garden Sprinkler</b> (top-left) &mdash; Home dashboard; live ON/OFF state of every zone.</li>'
+        '<li><b>Manual</b> &mdash; Turn each zone on or off by hand, or run a zone for a set number of minutes.</li>'
+        '<li><b>Schedule</b> &mdash; Create timed runs. Each entry waters one zone at one time on the days you pick; '
+        'add several entries to run a zone at multiple times. Rain Skip settings live here too.</li>'
+        '<li><b>Settings</b> &mdash; Name each zone and set its GPIO pin (saved across reboots), plus data downloads.</li>'
+        '<li><b>Stats</b> &mdash; Firmware version, free memory, uptime, storage and a Restart button.</li>'
+        '<li><b>Telemetry</b> &mdash; Event log you can watch and download as CSV.</li>'
+        '</ul></div>')
+    yield from resp.awrite(
+        '<div class="card"><h2>Remote API</h2>'
+        '<p>Control zones over HTTP. Replace &lt;ip&gt; with this device\'s address. '
+        'Zone defaults to 1 if omitted.</p>'
+        '<table><tr><th>Request</th><th>What it does</th></tr>'
+        '<tr><td>GET /api/sprinkler?zone=N</td><td>Return zone N state as JSON</td></tr>'
+        '<tr><td>POST /api/sprinkler?zone=N&amp;action=on</td><td>Turn zone N on</td></tr>'
+        '<tr><td>POST /api/sprinkler?zone=N&amp;action=off</td><td>Turn zone N off</td></tr>'
+        '<tr><td>POST /api/sprinkler?zone=N&amp;turnonfor=SECONDS</td><td>Run zone N for SECONDS, then auto-off (max 14400)</td></tr>'
+        '</table>'
+        '<p><small>Example: <code>curl -X POST "http://&lt;ip&gt;/api/sprinkler?zone=2&amp;turnonfor=300"</code></small></p>'
+        '<p><small>Response: <code>{"state":"on","zone":2,"gpio":19,"auto_off_in_seconds":295}</code></small></p>'
+        '<p><small><b>No authentication</b> &mdash; keep this device on a trusted network only.</small></p>'
+        '</div>')
+    yield from resp.awrite(
+        '<div class="card"><h2>About</h2>'
+        '<p>MotionSprinkler firmware for ESP32 (MicroPython).</p>'
+        '<p>&copy; 2026 Oakridge Technologies &mdash; maintained by nalkema1.</p>'
+        '<p>Source &amp; releases: <a href="https://github.com/nalkema1/MotionSprinkler">'
+        'github.com/nalkema1/MotionSprinkler</a></p>'
+        '<p><small>Firmware version: ' + get_current_version() + '</small></p>'
+        '</div>')
+    yield from resp.awrite(_FOOT)
 
 sendTelemetry("Webserver started")
 app.run(debug=True, host="0.0.0.0", port=80)
