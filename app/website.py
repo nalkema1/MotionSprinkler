@@ -524,11 +524,17 @@ def telemetry(req, resp):
         yield from resp.awrite('<table><tr><th>Date</th><th>Message</th></tr>')
         with open(TELEMETRY_FILE, 'r') as f:
             lines = f.readlines()
+        # Show only the most recent ~120 entries: bounds memory/response size on
+        # this (heaviest) page and keeps the newest events first.
+        lines = lines[-120:]
         lines.reverse()
         for line in lines:
-            date, msg = line.strip().split(',', 1)
-            yield from resp.awrite('<tr><td>' + date + '</td><td>' + msg + '</td></tr>')
-        yield from resp.awrite('</table></div>' + _FOOT)
+            parts = line.strip().split(',', 1)
+            if len(parts) == 2:
+                yield from resp.awrite('<tr><td>' + parts[0] + '</td><td>' + _esc(parts[1]) + '</td></tr>')
+        yield from resp.awrite('</table></div>'
+                               '<p><small>Showing the most recent entries. '
+                               'Use Download CSV for the full log.</small></p>' + _FOOT)
     except OSError:
         yield from resp.awrite(_head("Telemetry"))
         yield from resp.awrite('<h1>No telemetry file.</h1>' + _FOOT)
