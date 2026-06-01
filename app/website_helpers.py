@@ -6,7 +6,7 @@ __all__ = [
     'WEEKDAY_STR', 'TELEMETRY_FILE', 'RAIN_HISTORY_FILE',
     # settings
     'load_settings', 'save_settings', 'get_relay_by_id', 'get_current_version',
-    'VALID_PINS', 'read_pin',
+    'VALID_PINS', 'read_pin', '_esc',
     # zone timers (underscore names excluded from import * without __all__)
     '_zone_timers', '_zone_clear_timer', 'manual_on_for',
     # config & rain
@@ -48,6 +48,13 @@ def read_pin(gpio):
     except (ValueError, TypeError):
         return None
 
+def _esc(s):
+    # Minimal HTML escape for user-entered text (zone / schedule names) so a
+    # character like " < > & can't break page markup or an attribute value.
+    s = str(s)
+    return (s.replace('&', '&amp;').replace('<', '&lt;')
+             .replace('>', '&gt;').replace('"', '&quot;'))
+
 def default_settings():
     return {
         "version": 1,
@@ -63,23 +70,29 @@ def load_settings():
     global _settings_cache
     if _settings_cache is not None:
         return _settings_cache
+    s = None
     try:
         with open(SETTINGS_FILE, 'r') as f:
             s = ujson.loads(f.read())
-        if not s or 'relays' not in s:
-            s = default_settings()
-            save_settings(s)
-    except OSError:
+    except Exception:
+        # Missing OR corrupt (e.g. a partial/interrupted write). Catch broadly
+        # so a bad file can never throw on every request and brick the whole UI.
+        s = None
+    if not s or not isinstance(s, dict) or not s.get('relays'):
         s = default_settings()
         save_settings(s)
     # Auto-heal any persisted invalid GPIO (e.g. legacy GPIO 20) back to the
     # per-zone default so a bad saved pin can't permanently break a zone.
     defaults = {d['id']: d['gpio'] for d in default_settings()['relays']}
     healed = False
-    for r in s['relays']:
-        if r.get('gpio') not in VALID_PINS:
-            r['gpio'] = defaults.get(r['id'], 17)
-            healed = True
+    try:
+        for r in s['relays']:
+            if r.get('gpio') not in VALID_PINS:
+                r['gpio'] = defaults.get(r.get('id'), 17)
+                healed = True
+    except Exception:
+        s = default_settings()
+        healed = True
     if healed:
         save_settings(s)
     _settings_cache = s
@@ -87,9 +100,26 @@ def load_settings():
 
 def save_settings(s):
     global _settings_cache
-    with open(SETTINGS_FILE, 'w') as f:
-        f.write(ujson.dumps(s))
-    _settings_cache = s
+    _settings_cache = s  # keep the running instance correct even if disk write fails
+    data = ujson.dumps(s)
+    # Atomic write: fully write a temp file, then swap it in, so an interrupted
+    # write (power loss, watchdog reset) can never leave a half-written, corrupt
+    # settings file behind.
+    try:
+        tmp = SETTINGS_FILE + '.tmp'
+        with open(tmp, 'w') as f:
+            f.write(data)
+        try:
+            os.remove(SETTINGS_FILE)
+        except OSError:
+            pass
+        os.rename(tmp, SETTINGS_FILE)
+    except Exception:
+        try:
+            with open(SETTINGS_FILE, 'w') as f:
+                f.write(data)
+        except Exception:
+            pass
 
 def get_relay_by_id(relay_id):
     for r in load_settings()['relays']:
@@ -179,9 +209,10 @@ def load_config():
     try:
         with open(CONFIG_FILE, 'r') as f:
             loaded = ujson.loads(f.read())
-    except OSError:
+    except Exception:
+        # Missing OR corrupt - reset rather than throwing on every request.
         loaded = None
-    if not loaded:
+    if not loaded or not isinstance(loaded, dict):
         fresh = empty_config()
         save_config(fresh)
         return fresh
@@ -204,9 +235,23 @@ def load_config():
 
 def save_config(config):
     global config_data_cache
-    with open(CONFIG_FILE, 'w') as f:
-        f.write(ujson.dumps(config))
-    config_data_cache = config
+    config_data_cache = config  # keep running instance correct even if disk write fails
+    data = ujson.dumps(config)
+    try:
+        tmp = CONFIG_FILE + '.tmp'
+        with open(tmp, 'w') as f:
+            f.write(data)
+        try:
+            os.remove(CONFIG_FILE)
+        except OSError:
+            pass
+        os.rename(tmp, CONFIG_FILE)
+    except Exception:
+        try:
+            with open(CONFIG_FILE, 'w') as f:
+                f.write(data)
+        except Exception:
+            pass
 
 # ── Rain helpers ──────────────────────────────────────────────────────────────
 RAIN_HISTORY_FILE = 'rain_history.csv'
@@ -400,7 +445,7 @@ def _zone_select(selected, relays, fname='zone'):
     opts = ''
     for r in relays:
         sel = ' selected' if r['id'] == selected else ''
-        opts += '<option value="' + str(r['id']) + '"' + sel + '>' + r.get('name', 'Zone ' + str(r['id'])) + '</option>'
+        opts += '<option value="' + str(r['id']) + '"' + sel + '>' + _esc(r.get('name', 'Zone ' + str(r['id']))) + '</option>'
     return '<select name="' + fname + '">' + opts + '</select>'
 
 def _schedule_block(s, relays):
@@ -422,7 +467,7 @@ def _schedule_block(s, relays):
         '<input type="hidden" name="id" value="' + sid + '">'
         '<div class="row">'
         '<label><input type="checkbox" name="enabled"' + en + '> On</label>'
-        'Name:<input type="text" name="name" value="' + name + '" style="width:110px">'
+        'Name:<input type="text" name="name" value="' + _esc(name) + '" style="width:110px">'
         'Time:<input type="time" name="time" value="' + t + '">'
         'Min:<input type="number" name="duration" value="' + dur + '" min="1" max="240" style="width:55px">'
         'Zone:' + _zone_select(zone, relays) +

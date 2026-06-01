@@ -6,7 +6,7 @@ from app.website_helpers import (
     myTime, sendTelemetry, gc, os,
     WEEKDAY_STR, TELEMETRY_FILE, RAIN_HISTORY_FILE,
     load_settings, save_settings, get_relay_by_id, get_current_version,
-    VALID_PINS, read_pin,
+    VALID_PINS, read_pin, _esc,
     _zone_timers, _zone_clear_timer, manual_on_for,
     load_config, save_config, activate_sprinkler,
     do_rain_check, should_skip_for_rain, daily_rain_check_if_due,
@@ -15,6 +15,19 @@ from app.website_helpers import (
 )
 
 app = picoweb.WebApp(__name__)
+
+def _sr(resp, content_type="text/html; charset=utf-8", status="200", headers=None):
+    # Wrap picoweb.start_response to always send "Connection: close". Otherwise
+    # the browser may reuse a keep-alive socket that this server has already
+    # closed; that lost request shows up as an intermittent blank page, and a
+    # refresh (on a fresh connection) then works.
+    h = {"Connection": "close"}
+    if headers:
+        try:
+            h.update(headers)
+        except Exception:
+            pass
+    return picoweb.start_response(resp, content_type=content_type, status=status, headers=h)
 
 # ── Schedule checker ──────────────────────────────────────────────────────────
 
@@ -100,7 +113,7 @@ _sched_timer.init(period=30000, mode=Timer.PERIODIC, callback=schedule_checker)
 @app.route("/")
 def index(req, resp):
     relays = load_settings()['relays']
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     yield from resp.awrite(_head("Dashboard"))
     yield from resp.awrite('<h1>&#127807; Dashboard</h1><div class="grid">')
     for r in relays:
@@ -121,7 +134,7 @@ def index(req, resp):
             if rem > 0:
                 timer_html = '<br><small>Off in {}m{}s</small>'.format(rem // 60, rem % 60)
         yield from resp.awrite(
-            '<div class="card"><h3>' + name + '</h3>' + badge + timer_html +
+            '<div class="card"><h3>' + _esc(name) + '</h3>' + badge + timer_html +
             '<br><small>GPIO ' + str(gpio) + '</small></div>'
         )
     # Big buttons are for phones only; wide screens use the top menu.
@@ -169,7 +182,7 @@ def manual(req, resp):
                 minutes = max(1.0, min(240.0, minutes))
                 manual_on_for(minutes, gpio, zone_id)
                 message = "{} ON for {}min.".format(zname, minutes)
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     yield from resp.awrite(_head("Manual"))
     yield from resp.awrite('<h1>&#9654; Manual Control</h1>')
     if message:
@@ -194,7 +207,7 @@ def manual(req, resp):
                 timer_html = '<p><small>Off in {}m{}s</small></p>'.format(rem // 60, rem % 60)
         rid_s = str(rid)
         yield from resp.awrite(
-            '<div class="card"><h3>' + name + '</h3><p>' + badge + '</p>' + timer_html +
+            '<div class="card"><h3>' + _esc(name) + '</h3><p>' + badge + '</p>' + timer_html +
             '<form method="POST" style="display:inline">'
             '<input type="hidden" name="zone_id" value="' + rid_s + '">'
             '<input type="hidden" name="action" value="on">'
@@ -296,10 +309,10 @@ def schedule_page(req, resp):
         # fail and return a blank page after Save/Delete even though the change
         # was saved. Redirecting rebuilds the page on a fresh GET with the
         # form-data memory released.
-        yield from picoweb.start_response(resp, status="303", headers={"Location": "/schedule"})
+        yield from _sr(resp, status="303", headers={"Location": "/schedule"})
         return
 
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     yield from resp.awrite(_head("Schedule"))
     head = '<h1>&#128198; Schedule</h1>'
     if message:
@@ -361,7 +374,7 @@ def settings_page(req, resp):
         message = "Saved. Invalid pins rejected: " + ", ".join(rejected) if rejected else "Settings saved."
         s = load_settings()
 
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     yield from resp.awrite(_head("Settings"))
     head = '<h1>&#9881; Settings</h1>'
     if message:
@@ -370,7 +383,7 @@ def settings_page(req, resp):
     for r in s['relays']:
         rids = str(r['id'])
         zone_rows += ('<tr><td>Zone ' + rids + '</td>'
-                      '<td><input type="text" name="name_' + rids + '" value="' + r.get('name', 'Zone ' + rids) + '" style="width:120px"></td>'
+                      '<td><input type="text" name="name_' + rids + '" value="' + _esc(r.get('name', 'Zone ' + rids)) + '" style="width:120px"></td>'
                       '<td><input type="number" name="gpio_' + rids + '" value="' + str(r['gpio']) + '" min="0" max="39" style="width:65px"></td></tr>')
     head += ('<div class="card"><h2>Zones</h2>'
              '<form method="POST" action="/settings">'
@@ -401,7 +414,7 @@ def api_sprinkler(req, resp):
             break
     relay = get_relay_by_id(zone_id)
     if relay is None:
-        yield from picoweb.start_response(resp, status="400", content_type="application/json")
+        yield from _sr(resp, status="400", content_type="application/json")
         yield from resp.awrite(ujson.dumps({"error": "unknown zone"}))
         return
     gpio = relay['gpio']
@@ -420,7 +433,7 @@ def api_sprinkler(req, resp):
             except Exception:
                 seconds = 0
             if seconds <= 0:
-                yield from picoweb.start_response(resp, status="400", content_type="application/json")
+                yield from _sr(resp, status="400", content_type="application/json")
                 yield from resp.awrite(ujson.dumps({"error": "turnonfor must be positive"}))
                 return
             manual_on_for(min(seconds, 14400) / 60.0, gpio, zone_id)
@@ -433,7 +446,7 @@ def api_sprinkler(req, resp):
             relay_pin.value(0)
             sendTelemetry("Zone {} OFF API".format(zone_id))
         else:
-            yield from picoweb.start_response(resp, status="400", content_type="application/json")
+            yield from _sr(resp, status="400", content_type="application/json")
             yield from resp.awrite(ujson.dumps({"error": "use ?action=on|off or ?turnonfor=SECONDS"}))
             return
     state = "on" if relay_pin.value() == 1 else "off"
@@ -443,12 +456,12 @@ def api_sprinkler(req, resp):
         rem = info['off_at'] - int(time.time())
         if rem > 0:
             result["auto_off_in_seconds"] = rem
-    yield from picoweb.start_response(resp, content_type="application/json")
+    yield from _sr(resp, content_type="application/json")
     yield from resp.awrite(ujson.dumps(result))
 
 @app.route("/stats")
 def stats(req, resp):
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     mem_free = gc.mem_free()
     uptime = utime.time()
     ud = uptime // 86400
@@ -474,7 +487,7 @@ def stats(req, resp):
 
 @app.route("/restart", methods=['POST'])
 def restart(req, resp):
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     sendTelemetry("Restart initiated.")
     yield from resp.awrite(_head("Restarting"))
     yield from resp.awrite('<h1>Restarting...</h1>' + _FOOT)
@@ -483,12 +496,12 @@ def restart(req, resp):
 
 @app.route("/config.json")
 def config_json(req, resp):
-    yield from picoweb.start_response(resp, content_type="application/json")
+    yield from _sr(resp, content_type="application/json")
     yield from resp.awrite(ujson.dumps(load_config()))
 
 @app.route("/rain_history.csv")
 def download_rain_history(req, resp):
-    yield from picoweb.start_response(resp, content_type="text/csv")
+    yield from _sr(resp, content_type="text/csv")
     yield from resp.awrite("date,mm\n")
     try:
         with open(RAIN_HISTORY_FILE, 'r') as f:
@@ -498,7 +511,7 @@ def download_rain_history(req, resp):
 
 @app.route("/telemetry")
 def telemetry(req, resp):
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     try:
         fstat = os.stat(TELEMETRY_FILE)
         lm = time.localtime(fstat[8])
@@ -522,7 +535,7 @@ def telemetry(req, resp):
 
 @app.route("/telemetry.csv")
 def download_telemetry(req, resp):
-    yield from picoweb.start_response(resp, content_type="text/csv")
+    yield from _sr(resp, content_type="text/csv")
     try:
         with open(TELEMETRY_FILE, 'r') as f:
             yield from resp.awrite(f.read())
@@ -534,11 +547,11 @@ def clear_telemetry(req, resp):
     try:
         os.remove(TELEMETRY_FILE)
         sendTelemetry("Telemetry cleared.")
-        yield from picoweb.start_response(resp)
+        yield from _sr(resp)
         yield from resp.awrite(_head("Cleared"))
         yield from resp.awrite('<h1>Telemetry cleared.</h1><p><a href="/">Home</a></p>' + _FOOT)
     except OSError:
-        yield from picoweb.start_response(resp)
+        yield from _sr(resp)
         yield from resp.awrite(_head("Error"))
         yield from resp.awrite('<h1>Failed to clear telemetry.</h1><p><a href="/">Home</a></p>' + _FOOT)
 
@@ -546,11 +559,11 @@ def clear_telemetry(req, resp):
 def favicon(req, resp):
     # Answer the browser's favicon request cheaply so it doesn't open a second
     # competing connection (picoweb serves one request at a time).
-    yield from picoweb.start_response(resp, status="204", headers={"Content-Length": "0"})
+    yield from _sr(resp, status="204", headers={"Content-Length": "0"})
 
 @app.route("/help")
 def help_page(req, resp):
-    yield from picoweb.start_response(resp)
+    yield from _sr(resp)
     yield from resp.awrite(_head("Help"))
     yield from resp.awrite('<h1>&#10067; Help</h1>')
     yield from resp.awrite(
