@@ -32,13 +32,16 @@ def ConnectToNetwork(reset_action=''):
     global wm
 
     if not wm.is_connected():
+        sendTelemetry("WiFi down, reconnecting...")
         for retries in range(5):
             wm.connect(prod, reset_action)
             if wm.is_connected():
                 break
             else:
                 time.sleep(1)
+        sendTelemetry("WiFi {}, syncing time...".format("reconnected" if wm.is_connected() else "reconnect FAILED"))
         ntpsync()
+        sendTelemetry("Time sync done")
             
 def CheckSchedule(timer):
 

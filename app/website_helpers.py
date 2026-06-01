@@ -247,6 +247,9 @@ def do_rain_check(config, force=False):
         url = ("https://api.open-meteo.com/v1/forecast"
                "?latitude={}&longitude={}&daily=precipitation_sum"
                "&timezone=auto&start_date={}&end_date={}").format(lat, lon, today, today)
+        # Logged BEFORE the (blocking, no-timeout) request so that if it hangs,
+        # this is the last telemetry line - making a network stall obvious.
+        sendTelemetry("Rain check: requesting weather for {}".format(today))
         r = urequests.get(url)
         data = r.json()
         r.close()

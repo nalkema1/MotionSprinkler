@@ -69,8 +69,17 @@ def check_schedule(config):
         fired = True
     return fired
 
+_hb_count = 0
+
 def schedule_checker(timer):
+    global _hb_count
     try:
+        _hb_count += 1
+        if _hb_count % 20 == 0:  # ~ every 10 min (20 x 30s) - liveness heartbeat
+            try:
+                sendTelemetry("alive uptime={}s mem={}".format(utime.time(), gc.mem_free()))
+            except Exception:
+                pass
         config_data = load_config()
         if config_data:
             # check_schedule first so watering is never delayed/blocked by the
@@ -577,6 +586,27 @@ def help_page(req, resp):
         '<p><small>Firmware version: ' + get_current_version() + '</small></p>'
         '</div>')
     yield from resp.awrite(_FOOT)
+
+# ── Watchdog ──────────────────────────────────────────────────────────────────
+# If the main thread ever wedges (e.g. a network call hangs overnight), the
+# device used to sit dead-but-pingable until found in the morning. A hardware
+# watchdog reboots it automatically instead. A DEDICATED 1 s feed timer (id 2,
+# separate from the 30s/60s work timers) gives a wide margin against false
+# trips: feeds stop only if the single thread is genuinely blocked, and the
+# device resets ~60 s later and recovers on its own. Armed only after OTA (which
+# runs earlier in start.py) so a slow update download can't trip it.
+try:
+    from machine import WDT
+    _wdt = WDT(timeout=60000)  # 60 s
+
+    def _feed_wdt(t):
+        _wdt.feed()
+
+    _wdt_feeder = Timer(2)
+    _wdt_feeder.init(period=1000, mode=Timer.PERIODIC, callback=_feed_wdt)
+    sendTelemetry("Watchdog armed (60s)")
+except Exception as e:
+    sendTelemetry("Watchdog init failed: {}".format(e))
 
 sendTelemetry("Webserver started")
 app.run(debug=True, host="0.0.0.0", port=80)
