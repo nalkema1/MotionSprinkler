@@ -18,14 +18,19 @@ app = picoweb.WebApp(__name__)
 
 # ── Schedule checker ──────────────────────────────────────────────────────────
 
+# schedule id -> "YYYY-MM-DD HH:MM" it last fired. The 30s checker can match
+# the same minute twice; this guarantees one trigger per scheduled minute.
+_last_fired = {}
+
 def check_schedule(config):
     schedules = config.get('schedules') or []
     if not schedules:
         return False
-    current_time = myTime()
-    cur_h = current_time[3]
-    cur_m = current_time[4]
-    today_name = WEEKDAY_STR[current_time[6]]
+    ct = myTime()
+    cur_h = ct[3]
+    cur_m = ct[4]
+    today_name = WEEKDAY_STR[ct[6]]
+    minute_key = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}".format(ct[0], ct[1], ct[2], cur_h, cur_m)
     fired = False
     for s in schedules:
         if not s.get('enabled'):
@@ -40,17 +45,27 @@ def check_schedule(config):
             continue
         if cur_h != sh or cur_m != sm:
             continue
-        name = s.get('name') or 'schedule {}'.format(s.get('id'))
+        sid = s.get('id')
+        if _last_fired.get(sid) == minute_key:
+            continue  # already handled this schedule during the current minute
+        name = s.get('name') or 'schedule {}'.format(sid)
         if should_skip_for_rain(config):
             rs = config.get('rain_skip') or {}
             sendTelemetry("Skip {} rain {}mm".format(name, rs.get('last_check_mm', 0.0)))
+            _last_fired[sid] = minute_key
             continue
         duration = int(s.get('duration', 0))
         zone_id = s.get('zone', 1)
         relay_info = get_relay_by_id(zone_id)
         gpio = relay_info['gpio'] if relay_info else 17
         sendTelemetry("Run {} z{} {}min".format(name, zone_id, duration))
-        activate_sprinkler(duration * 60, gpio)
+        # Non-blocking: turn the zone on now and let the 1 Hz poll timer switch
+        # it off after `duration` minutes. The old activate_sprinkler() called
+        # time.sleep(duration*60), which froze the entire web server (and every
+        # other zone/timer) for the whole watering period - the device answered
+        # pings but the UI was dead until watering finished.
+        manual_on_for(duration, gpio, zone_id)
+        _last_fired[sid] = minute_key
         fired = True
     return fired
 
