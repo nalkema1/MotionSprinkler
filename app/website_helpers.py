@@ -266,10 +266,14 @@ def should_skip_for_rain(config):
     rs = config.get('rain_skip') or {}
     if not rs.get('enabled'):
         return False
-    mm = do_rain_check(config, force=False)
-    if mm is None:
+    # Cache-only: NEVER do a blocking network fetch here. This runs on the
+    # schedule-firing path, and a hung HTTPS request (WiFi/TLS stall) would
+    # freeze the whole web server and stop the zone from ever turning on.
+    # The once-a-day background check (daily_rain_check_if_due) refreshes the
+    # cached value. If we have no value for today yet, don't skip - just water.
+    if rs.get('last_check_date') != today_str(myTime()):
         return False
-    return mm >= rs.get('threshold_mm', 2.5)
+    return rs.get('last_check_mm', 0.0) >= rs.get('threshold_mm', 2.5)
 
 def daily_rain_check_if_due(config):
     rs = config.get('rain_skip') or {}

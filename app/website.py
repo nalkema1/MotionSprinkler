@@ -70,10 +70,18 @@ def check_schedule(config):
     return fired
 
 def schedule_checker(timer):
-    config_data = load_config()
-    if config_data:
-        daily_rain_check_if_due(config_data)
-        check_schedule(config_data)
+    try:
+        config_data = load_config()
+        if config_data:
+            # check_schedule first so watering is never delayed/blocked by the
+            # once-a-day background rain fetch (the only network call here).
+            check_schedule(config_data)
+            daily_rain_check_if_due(config_data)
+    except Exception as e:
+        try:
+            sendTelemetry("schedule_checker error: {}".format(e))
+        except Exception:
+            pass
 
 _sched_timer = Timer(-1)
 _sched_timer.init(period=30000, mode=Timer.PERIODIC, callback=schedule_checker)
