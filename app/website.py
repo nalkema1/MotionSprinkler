@@ -254,7 +254,14 @@ def schedule_page(req, resp):
             cfg['rain_skip'] = rs
             save_config(cfg)
             message = "Rain settings saved."
-        cfg = load_config()
+        # Post/Redirect/Get: reply with a 303 redirect instead of re-rendering
+        # the full page inline. The inline re-render ran while the parsed POST
+        # form data was still in memory; on a near-full heap that render could
+        # fail and return a blank page after Save/Delete even though the change
+        # was saved. Redirecting rebuilds the page on a fresh GET with the
+        # form-data memory released.
+        yield from picoweb.start_response(resp, status="303", headers={"Location": "/schedule"})
+        return
 
     yield from picoweb.start_response(resp)
     yield from resp.awrite(_head("Schedule"))
