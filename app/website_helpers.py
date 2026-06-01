@@ -233,6 +233,21 @@ def _append_rain_history(date_str, mm):
     except Exception as e:
         sendTelemetry("Rain history err: {}".format(e))
 
+# Whether this build's urequests accepts a timeout= kwarg (detected once).
+_req_timeout_ok = True
+
+def _http_get(url):
+    # Bounded HTTP GET so a hung request can't freeze the single main thread.
+    # If this firmware's urequests has no timeout= kwarg, fall back once and
+    # let the watchdog cover that (older) build.
+    global _req_timeout_ok
+    if _req_timeout_ok:
+        try:
+            return urequests.get(url, timeout=15)
+        except TypeError:
+            _req_timeout_ok = False
+    return urequests.get(url)
+
 def do_rain_check(config, force=False):
     rs = config.get('rain_skip') or {}
     lat = rs.get('latitude', 0.0)
@@ -250,7 +265,7 @@ def do_rain_check(config, force=False):
         # Logged BEFORE the (blocking, no-timeout) request so that if it hangs,
         # this is the last telemetry line - making a network stall obvious.
         sendTelemetry("Rain check: requesting weather for {}".format(today))
-        r = urequests.get(url)
+        r = _http_get(url)
         data = r.json()
         r.close()
         mm = float(data['daily']['precipitation_sum'][0] or 0.0)
@@ -278,7 +293,10 @@ def should_skip_for_rain(config):
         return False
     return rs.get('last_check_mm', 0.0) >= rs.get('threshold_mm', 2.5)
 
+_last_rain_attempt = 0
+
 def daily_rain_check_if_due(config):
+    global _last_rain_attempt
     rs = config.get('rain_skip') or {}
     if not rs.get('enabled'):
         return
@@ -289,6 +307,12 @@ def daily_rain_check_if_due(config):
         return
     if current_time[3] < 1:
         return
+    # If the fetch keeps failing, don't retry every 30s - wait 10 min between
+    # attempts so a flaky-network morning can't cause repeated stalls.
+    now = time.time()
+    if now - _last_rain_attempt < 600:
+        return
+    _last_rain_attempt = now
     do_rain_check(config, force=False)
 
 # ── CSS & page chrome ─────────────────────────────────────────────────────────
