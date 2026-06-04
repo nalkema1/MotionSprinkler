@@ -236,6 +236,11 @@ def load_config():
 def save_config(config):
     global config_data_cache
     config_data_cache = config  # keep running instance correct even if disk write fails
+    # Free the heap before the (relatively large) JSON serialization. On a
+    # fragmented/near-full heap ujson.dumps() can raise MemoryError, which used
+    # to drop the save silently - the change lived only in the RAM cache and was
+    # lost on the next reboot ("nothing saved").
+    gc.collect()
     data = ujson.dumps(config)
     try:
         tmp = CONFIG_FILE + '.tmp'

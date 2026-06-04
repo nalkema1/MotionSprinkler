@@ -227,6 +227,7 @@ def manual(req, resp):
 
 @app.route("/schedule", methods=['GET', 'POST'])
 def schedule_page(req, resp):
+    gc.collect()  # start each request on a defragmented heap
     cfg = load_config()
     relays = load_settings()['relays']
     message = ""
@@ -309,6 +310,7 @@ def schedule_page(req, resp):
         # fail and return a blank page after Save/Delete even though the change
         # was saved. Redirecting rebuilds the page on a fresh GET with the
         # form-data memory released.
+        gc.collect()  # release form-data/JSON buffers before the redirect
         yield from _sr(resp, status="303", headers={"Location": "/schedule"})
         return
 
@@ -323,30 +325,39 @@ def schedule_page(req, resp):
 
     # Schedules grouped by zone. Manual grouping (plain loops) avoids
     # sorted(key=...), which is unreliable on this MicroPython build. Each
-    # block is rendered defensively so one bad entry can't blank the page.
+    # block is streamed out individually (rather than concatenated into one
+    # large string) and rendered defensively, so neither peak memory nor one
+    # bad entry can blank the page mid-render.
     scheds = cfg.get('schedules', [])
     known = [r['id'] for r in relays]
-    blocks = ''
+    yield from resp.awrite('<h2>Schedules</h2>')
+    wrote_block = False
     for r in relays:
         for sc in scheds:
             if sc.get('zone', 1) == r['id']:
                 try:
-                    blocks += _schedule_block(sc, relays)
+                    yield from resp.awrite(_schedule_block(sc, relays))
+                    wrote_block = True
                 except Exception:
                     pass
     for sc in scheds:
         if sc.get('zone', 1) not in known:
             try:
-                blocks += _schedule_block(sc, relays)
+                yield from resp.awrite(_schedule_block(sc, relays))
+                wrote_block = True
             except Exception:
                 pass
-    if not blocks:
-        blocks = '<p><em>No schedules yet. Add one below.</em></p>'
-    yield from resp.awrite('<h2>Schedules</h2>' + blocks)
-    yield from resp.awrite('<h2>Add Schedule</h2>' + _add_form(relays))
+    if not wrote_block:
+        yield from resp.awrite('<p><em>No schedules yet. Add one below.</em></p>')
+    gc.collect()
+    yield from resp.awrite('<h2>Add Schedule</h2>')
+    yield from resp.awrite(_add_form(relays))
 
-    yield from resp.awrite('<h2>Rain Skip</h2>' + _rain_form(cfg.get('rain_skip') or {}))
-    yield from resp.awrite('<h2>Rain History (14 days)</h2>' + _rain_history())
+    gc.collect()
+    yield from resp.awrite('<h2>Rain Skip</h2>')
+    yield from resp.awrite(_rain_form(cfg.get('rain_skip') or {}))
+    yield from resp.awrite('<h2>Rain History (14 days)</h2>')
+    yield from resp.awrite(_rain_history())
     yield from resp.awrite(_FOOT)
 
 @app.route("/settings", methods=['GET', 'POST'])
@@ -376,21 +387,23 @@ def settings_page(req, resp):
 
     yield from _sr(resp)
     yield from _emit_head(resp, "Settings")
-    head = '<h1>&#9881; Settings</h1>'
+    gc.collect()
+    yield from resp.awrite('<h1>&#9881; Settings</h1>')
     if message:
-        head += '<div class="msg">' + message + '</div>'
-    zone_rows = ''
+        yield from resp.awrite('<div class="msg">' + message + '</div>')
+    # Stream the zone table row by row instead of building one large string, so
+    # peak memory stays flat regardless of zone count.
+    yield from resp.awrite('<div class="card"><h2>Zones</h2>'
+                           '<form method="POST" action="/settings">'
+                           '<table><tr><th>Zone</th><th>Name</th><th>GPIO</th></tr>')
     for r in s['relays']:
         rids = str(r['id'])
-        zone_rows += ('<tr><td>Zone ' + rids + '</td>'
-                      '<td><input type="text" name="name_' + rids + '" value="' + _esc(r.get('name', 'Zone ' + rids)) + '" style="width:120px"></td>'
-                      '<td><input type="number" name="gpio_' + rids + '" value="' + str(r['gpio']) + '" min="0" max="39" style="width:65px"></td></tr>')
-    head += ('<div class="card"><h2>Zones</h2>'
-             '<form method="POST" action="/settings">'
-             '<table><tr><th>Zone</th><th>Name</th><th>GPIO</th></tr>' + zone_rows +
-             '</table><br><input type="submit" value="Save Zones"></form></div>')
-    head += ('<p><small>Set schedules on the <a href="/schedule">Schedule</a> page.</small></p>')
-    yield from resp.awrite(head)
+        yield from resp.awrite('<tr><td>Zone ' + rids + '</td>'
+                               '<td><input type="text" name="name_' + rids + '" value="' + _esc(r.get('name', 'Zone ' + rids)) + '" style="width:120px"></td>'
+                               '<td><input type="number" name="gpio_' + rids + '" value="' + str(r['gpio']) + '" min="0" max="39" style="width:65px"></td></tr>')
+    yield from resp.awrite('</table><br><input type="submit" value="Save Zones"></form></div>')
+    yield from resp.awrite('<p><small>Set schedules on the <a href="/schedule">Schedule</a> page.</small></p>')
+    gc.collect()
 
     yield from resp.awrite('<div class="card"><h2>Data</h2><ul>'
                            '<li><a href="/config.json">&#8681; sprinkler_config.json</a></li>'
@@ -462,6 +475,7 @@ def api_sprinkler(req, resp):
 @app.route("/stats")
 def stats(req, resp):
     yield from _sr(resp)
+    gc.collect()
     mem_free = gc.mem_free()
     uptime = utime.time()
     ud = uptime // 86400
@@ -522,12 +536,14 @@ def telemetry(req, resp):
                                '<p><a href="/telemetry" class="bigbtn" style="display:inline-block;padding:8px 14px">&#8635; Refresh</a> '
                                '<a href="/telemetry.csv" class="bigbtn blu" style="display:inline-block;padding:8px 14px;background:#2471a3">&#8681; Download CSV</a></p>')
         yield from resp.awrite('<table><tr><th>Date</th><th>Message</th></tr>')
+        gc.collect()
         with open(TELEMETRY_FILE, 'r') as f:
             lines = f.readlines()
         # Show only the most recent ~120 entries: bounds memory/response size on
         # this (heaviest) page and keeps the newest events first.
         lines = lines[-120:]
         lines.reverse()
+        gc.collect()  # release the full-file list before rendering rows
         for line in lines:
             parts = line.strip().split(',', 1)
             if len(parts) == 2:

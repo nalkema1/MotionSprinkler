@@ -126,6 +126,18 @@ if wm.is_connected():
             error_message = f"OTA Update failed with error: {e}"
             sendTelemetry(error_message)
 
+# Free boot-only modules before compiling the web server. The OTA updater and
+# its HTTP client (~15 KB of bytecode) are used only during startup; dropping
+# their references and the module cache returns that RAM to the web UI.
+# wifi_manager stays resident - CheckSchedule() uses it to reconnect.
+import sys
+try:
+    del OTAUpdater
+except Exception:
+    pass
+for _m in ('app.ota_updater', 'app.httpclient'):
+    sys.modules.pop(_m, None)
+
 gc.collect()  # free heap before compiling the web server module
 import app.website
 
