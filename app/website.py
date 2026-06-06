@@ -7,7 +7,7 @@ from app.website_helpers import (
     WEEKDAY_STR, TELEMETRY_FILE, RAIN_HISTORY_FILE,
     load_settings, save_settings, get_relay_by_id, get_current_version,
     VALID_PINS, read_pin, _esc,
-    _zone_timers, _zone_clear_timer, manual_on_for,
+    _zone_timers, _zone_clear_timer, manual_on_for, mark_on, mark_off,
     load_config, save_config, activate_sprinkler,
     do_rain_check, should_skip_for_rain, daily_rain_check_if_due,
     _head, _emit_head, _FOOT,
@@ -167,11 +167,13 @@ def manual(req, resp):
             if action == "on":
                 _zone_clear_timer(zone_id)
                 Pin(gpio, Pin.OUT).value(1)
+                mark_on(zone_id)
                 sendTelemetry("{} ON".format(zname))
                 message = "{} turned ON.".format(zname)
             elif action == "off":
                 _zone_clear_timer(zone_id)
                 Pin(gpio, Pin.OUT).value(0)
+                mark_off(zone_id)
                 sendTelemetry("{} OFF".format(zname))
                 message = "{} turned OFF.".format(zname)
             elif action == "on_timed":
@@ -453,10 +455,12 @@ def api_sprinkler(req, resp):
         elif action == "on":
             _zone_clear_timer(zone_id)
             relay_pin.value(1)
+            mark_on(zone_id)
             sendTelemetry("Zone {} ON API".format(zone_id))
         elif action == "off":
             _zone_clear_timer(zone_id)
             relay_pin.value(0)
+            mark_off(zone_id)
             sendTelemetry("Zone {} OFF API".format(zone_id))
         else:
             yield from _sr(resp, status="400", content_type="application/json")

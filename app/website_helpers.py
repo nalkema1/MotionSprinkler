@@ -9,6 +9,7 @@ __all__ = [
     'VALID_PINS', 'read_pin', '_esc',
     # zone timers (underscore names excluded from import * without __all__)
     '_zone_timers', '_zone_clear_timer', 'manual_on_for',
+    'mark_on', 'mark_off',
     # config & rain
     'load_config', 'save_config', 'activate_sprinkler',
     'do_rain_check', 'should_skip_for_rain', 'daily_rain_check_if_due',
@@ -24,6 +25,7 @@ from machine import Pin, Timer, reset
 import time
 from app.timesync import myTime
 from app.telemetry import sendTelemetry
+from app.energize_marker import mark_on, mark_off
 import gc
 import os
 import urequests
@@ -150,6 +152,7 @@ def _zone_tick(t):
         if info and now >= info["off_at"]:
             try:
                 Pin(info["gpio"], Pin.OUT).value(0)
+                mark_off(rid)
                 sendTelemetry("Zone {} auto-off".format(rid))
             except Exception:
                 pass
@@ -170,6 +173,7 @@ def _zone_clear_timer(relay_id):
 
 def manual_on_for(minutes, gpio, relay_id):
     Pin(gpio, Pin.OUT).value(1)
+    mark_on(relay_id)
     off_at = int(time.time()) + int(round(minutes * 60))
     _zone_timers[relay_id] = {"gpio": gpio, "off_at": off_at}
     _start_tick()
@@ -185,8 +189,10 @@ def activate_sprinkler(duration_sec, gpio=17):
     if relay.value() == 0:
         sendTelemetry("Activated gpio{} {}s".format(gpio, duration_sec))
         relay.value(1)
+        mark_on(gpio)
         time.sleep(duration_sec)
         relay.value(0)
+        mark_off(gpio)
     else:
         sendTelemetry("gpio{} already ON".format(gpio))
 

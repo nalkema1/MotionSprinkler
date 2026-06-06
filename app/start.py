@@ -9,6 +9,7 @@ from app.ota_updater import OTAUpdater
 from app.wifi_manager import WifiManager
 from app.motiondetect import motion
 from app.telemetry import sendTelemetry
+from app.energize_marker import read_and_clear as _read_energized
 import machine
 from machine import Pin
 from time import sleep
@@ -95,6 +96,18 @@ if ( MyResetCause == machine.DEEPSLEEP_RESET ): resetstr = "DEEPSLEEP_RESET"
 if ( MyResetCause == machine.SOFT_RESET ): resetstr = "SOFT_RESET"
 
 sendTelemetry(f"Boot status : {resetstr}")
+
+# Was a relay/solenoid energized at the instant of the reset? The marker is
+# written to flash whenever a zone switches on/off, so it survives the reset and
+# tells power-brownout apart from a firmware crash. Read once, then clear.
+_energized_at_reset = _read_energized()
+if _energized_at_reset:
+    if MyResetCause == machine.HARD_RESET:
+        sendTelemetry("HARD_RESET while zone(s) {} energized -> likely power brownout (solenoid)".format(_energized_at_reset))
+    else:
+        sendTelemetry("Reset ({}) while zone(s) {} energized".format(resetstr, _energized_at_reset))
+elif MyResetCause == machine.HARD_RESET:
+    sendTelemetry("HARD_RESET with no zone energized -> likely firmware panic/external; capture crash over USB REPL")
 
 wm = WifiManager()
 ConnectToNetwork(resetstr)
